@@ -18,9 +18,16 @@ def isolated_event_log(tmp_path, monkeypatch):
 
 
 def test_server_exposes_only_the_read_tools():
-    names = {tool.name for tool in asyncio.run(mcp_server.mcp.list_tools())}
+    """A24: clients see exactly these tools, all explicitly read-only."""
+    tools = asyncio.run(mcp_server.mcp.list_tools())
+    names = {tool.name for tool in tools}
 
     assert names == {"search", "recall", "describe"}
+    for tool in tools:
+        assert tool.annotations is not None, f"{tool.name} has no annotations"
+        assert tool.annotations.readOnlyHint is True, (
+            f"{tool.name} must declare readOnlyHint=True"
+        )
 
 
 def test_search_tool_then_recall_tool_is_a_full_reach(tmp_path):
