@@ -131,7 +131,7 @@ def _install(skip_codex):
     else:
         try:
             setup.install_codex(setup.codex_home(), codex_bin)
-            print("khipumaq: Codex SessionEnd/SubagentStop hooks installed and trusted.")
+            print("khipumaq: Codex SessionEnd/SubagentStop hooks installed and trusted; MCP server registered.")
         except RuntimeError as exc:
             # The hooks are written but untrusted, so Codex will not run them.
             print(f"khipumaq: Codex hooks NOT trusted: {exc}", file=sys.stderr)
