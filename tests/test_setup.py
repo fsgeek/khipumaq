@@ -223,6 +223,42 @@ def test_codex_binary_finds_nvm_install_when_path_has_no_codex(
     assert os.access(codex, os.X_OK)
 
 
+def test_codex_binary_finds_standalone_install_when_path_has_no_codex(
+    tmp_path, monkeypatch
+):
+    fake_home = tmp_path / "home"
+    empty_path = tmp_path / "empty-bin"
+    empty_path.mkdir()
+    codex = fake_home / ".local" / "bin" / "codex"
+    codex.parent.mkdir(parents=True)
+    codex.write_text("#!/bin/sh\n", encoding="utf-8")
+    codex.chmod(0o755)
+    monkeypatch.setenv("HOME", str(fake_home))
+    monkeypatch.setenv("PATH", str(empty_path))
+    monkeypatch.delenv("CODEX_BIN", raising=False)
+
+    assert setup.codex_binary() == str(codex)
+
+
+def test_codex_binary_prefers_nvm_over_standalone_install(
+    tmp_path, monkeypatch
+):
+    fake_home = tmp_path / "home"
+    empty_path = tmp_path / "empty-bin"
+    empty_path.mkdir()
+    nvm_codex = fake_home / ".nvm" / "versions" / "node" / "v24.8.0" / "bin" / "codex"
+    standalone_codex = fake_home / ".local" / "bin" / "codex"
+    for codex in (nvm_codex, standalone_codex):
+        codex.parent.mkdir(parents=True)
+        codex.write_text("#!/bin/sh\n", encoding="utf-8")
+        codex.chmod(0o755)
+    monkeypatch.setenv("HOME", str(fake_home))
+    monkeypatch.setenv("PATH", str(empty_path))
+    monkeypatch.delenv("CODEX_BIN", raising=False)
+
+    assert setup.codex_binary() == str(nvm_codex)
+
+
 def test_codex_hook_returns_quickly_and_logs_detached_ingest(
     tmp_path, monkeypatch
 ):
