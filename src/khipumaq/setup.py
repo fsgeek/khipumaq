@@ -168,14 +168,14 @@ def codex_home():
 def codex_binary():
     """Needed only to ask Codex for the trust hashes of our hooks; the hooks are
     run by whichever Codex (CLI or VS Code extension) ends the session. Looks
-    past PATH because nvm and bun installs are often only on an interactive
-    shell's PATH."""
+    past PATH because nvm, bun and standalone (~/.local/bin) installs are often
+    only on an interactive shell's PATH."""
     found = os.environ.get("CODEX_BIN") or shutil.which("codex")
     if found:
         return found
     home = Path.home()
     candidates = sorted(home.glob(".nvm/versions/node/*/bin/codex"), reverse=True)
-    candidates += [home / "node_modules/.bin/codex", home / ".bun/bin/codex"]
+    candidates += [home / "node_modules/.bin/codex", home / ".bun/bin/codex", home / ".local/bin/codex"]
     for candidate in candidates:
         if candidate.exists():
             return str(candidate)
