@@ -19,6 +19,7 @@ Run for dogfooding:  uv run python -m khipumaq.mcp_server   (stdio transport)
 """
 
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 
 from khipumaq.db import get_database, person
 from khipumaq.describe import SERVER_NAME
@@ -49,7 +50,7 @@ mcp = FastMCP(SERVER_NAME, instructions=_self_description())
 history = QueryHistory(get_database, project=project_label())
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 def search(
     query: str,
     scope: str = "all",
@@ -83,7 +84,7 @@ def search(
     return result
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 def recall(key: str) -> dict | None:
     """Read one episode in full by the `key` from a search hit: the user's
     message, the assistant's whole response, timestamp, model, project label,
@@ -94,7 +95,7 @@ def recall(key: str) -> dict | None:
     return episode
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 def describe() -> dict:
     """What the store holds: episode count, counts by project label and by
     host, and the oldest/newest timestamps. Read-only; use it to pick a

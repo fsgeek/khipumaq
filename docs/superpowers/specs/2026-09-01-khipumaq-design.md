@@ -556,3 +556,18 @@ removes a `[mcp_servers.llm-memory]` table that runs `llm_memory.mcp_server`
 `[mcp_servers.khipumaq]` with the same command Claude Code gets;
 `uninstall` removes it. The table is edited as text, like the hook trust,
 and removed through to the next header, since `args` may span lines.
+
+Registration was half of it. With the entry fixed (2026-09-28, Codex 0.158),
+`codex exec` found the server and was refused: "MCP tool call requires
+approval, but approval policy is never". Codex now asks before calling an MCP
+tool that does not declare itself read-only, and a non-interactive session has
+no one to ask, so Codex test authors and other `exec` runs still could not
+search. A Codex session searched unprompted on 2026-09-04, so this arrived
+with a later Codex. The three tools now carry `readOnlyHint`; with that,
+Codex's default mode calls them without asking, and no approval setting is
+written into the user's config. The hint is true of what the tools do to the
+record: nothing. Each call does leave a row in `queries` (A23); that is the
+server logging its own use, as a web server logs a GET, and not a change to
+anything a caller acts on. Tested three ways from a foreign cwd:
+`default_tools_approval_mode` unset/`auto` and `writes` both call `describe`
+once the hint is present; `writes` without it is refused.
