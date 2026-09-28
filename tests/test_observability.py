@@ -1,8 +1,10 @@
 import hashlib
 import hmac
 import json
+import os
 import stat
 from datetime import datetime
+from pathlib import Path
 
 from khipumaq.observability import (
     _query_digest,
@@ -25,6 +27,24 @@ def _read_records(path):
 def _assert_utc_timestamp(record):
     assert record["ts"].endswith("Z")
     assert datetime.fromisoformat(record["ts"].removesuffix("Z") + "+00:00")
+
+
+def test_autouse_fixture_isolates_events_without_a_test_override(tmp_path):
+    # Check the destination before emitting, so a fixture regression cannot
+    # make this regression test itself write to the operational log.
+    path = Path(os.environ["LLM_MEMORY_EVENT_LOG"])
+    assert path.is_relative_to(tmp_path)
+    assert not path.exists()
+
+    assert emit_ingest_event(
+        kind="codex", label="isolation-test", host="h", count=1,
+        source_file=tmp_path / "rollout.jsonl",
+    ) is True
+
+    [record] = _read_records(path)
+    assert record["event"] == "ingest.completed"
+    assert record["source_file"] == str(tmp_path / "rollout.jsonl")
+    assert record["count"] == 1
 
 
 def test_emit_search_event_appends_the_documented_content_free_record(
