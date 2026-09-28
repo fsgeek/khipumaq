@@ -4,7 +4,8 @@ Four places, because four programs read them:
 - ~/.claude/settings.json: a SessionEnd hook that ingests the ending session.
 - ~/.claude.json: the read-only MCP server, under mcpServers["khipumaq"].
 - $CODEX_HOME/hooks.json + config.toml: SessionEnd/SubagentStop hooks that
-  ingest the closing rollout, and the trust Codex requires before it runs them.
+  ingest the closing rollout, the trust Codex requires before it runs them,
+  and the read-only MCP server, under [mcp_servers.khipumaq].
 - ~/.config/systemd/user: a daily sweep timer, the retry for failed hooks.
 
 Our entries are recognized by their command, not by a tag, so Codex's schema
@@ -264,7 +265,32 @@ def install_codex(home, codex_bin):
     text = config.read_text() if config.exists() else ""
     for hook in ours:
         text = _set_trust(text, hook["key"], hook["currentHash"])
+    text = _set_codex_mcp(text, LEGACY_MCP_NAME, only_if="llm_memory.mcp_server")
+    entry = _mcp_entry()
+    text = _set_codex_mcp(text, MCP_NAME, entry["command"], entry["args"])
     _atomic_write(config, text)
+
+
+def _set_codex_mcp(text, name, command=None, args=None, only_if=None):
+    """Remove the [mcp_servers.<name>] table and its subtables (when `only_if`,
+    only a table containing that text); re-add it when `command`. A table runs
+    to the next header, since `args` may span lines. The rename to khipumaq
+    left the pre-package entry pointing at a module that no longer exists."""
+    header = re.compile(r"^\[mcp_servers\." + re.escape(name) + r"(\.[^\]]*)?\]\s*$")
+    lines, kept, block = text.splitlines(keepends=True), [], None
+    for line in lines + ["[end]\n"]:
+        if line.startswith("[") and not (block is not None and header.match(line)):
+            if block is not None and only_if is not None and only_if not in "".join(block):
+                kept.extend(block)
+            block = [] if header.match(line) else None
+        if block is None:
+            kept.append(line)
+        else:
+            block.append(line)
+    text = "".join(kept[:-1])
+    if command:
+        text = text.rstrip("\n") + f"\n\n[mcp_servers.{name}]\ncommand = {json.dumps(command)}\nargs = {json.dumps(args)}\n"
+    return text
 
 
 def uninstall_codex(home):
@@ -272,6 +298,12 @@ def uninstall_codex(home):
     doc = _load(hooks_path)
     if _strip_hooks(doc, CODEX_EVENTS):
         _write_json(hooks_path, doc)
+    config = home / "config.toml"
+    if config.exists():
+        text = config.read_text()
+        stripped = _set_codex_mcp(text, MCP_NAME)
+        if stripped != text:
+            _atomic_write(config, stripped)
 
 
 # -- Codex hook entry ----------------------------------------------------------

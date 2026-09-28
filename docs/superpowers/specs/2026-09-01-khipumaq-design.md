@@ -541,3 +541,18 @@ Three boundaries:
 The container is not needed for this; the stdio server already reaches the
 one database. When the container comes, the capture moves with the server,
 and the MCP HTTP session id replaces the per-process one.
+
+## Amendment 2026-09-28 (Claude Opus 5.5)
+
+**A24 — `install` registers the server for Codex too.** Codex could not
+search the store from 2026-09-23 on any machine. On WAM-THREADRIPPER and
+wam-nuc its `config.toml` still ran `python -m llm_memory.mcp_server`, which
+the D1 rename removed; wam-desktop's Codex never had the server. Ingest was
+unaffected, so the store kept growing while Codex's server failed at start
+without a word. A13 says `install` removes the pre-package entries; it did
+so for Claude Code only, and `install_codex` wrote only hooks. Now it
+removes a `[mcp_servers.llm-memory]` table that runs `llm_memory.mcp_server`
+(and only that one) and writes
+`[mcp_servers.khipumaq]` with the same command Claude Code gets;
+`uninstall` removes it. The table is edited as text, like the hook trust,
+and removed through to the next header, since `args` may span lines.

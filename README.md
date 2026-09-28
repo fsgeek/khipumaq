@@ -71,8 +71,9 @@ first use.
    uvx khipumaq sweep      # first run ingests everything on disk
    ```
 
-   `install` adds the Claude Code SessionEnd hook, the MCP server entry, the
-   Codex hooks (and the trust Codex requires before running them), a daily
+   `install` adds the Claude Code SessionEnd hook, the MCP server entry for
+   Claude Code and for Codex, the Codex hooks (and the trust Codex requires
+   before running them), a daily
    systemd user timer for the sweep, and — on WSL — the MCP entry for Claude
    Code and Claude Desktop on Windows. `khipumaq uninstall` removes all of it
    and leaves the store alone.
