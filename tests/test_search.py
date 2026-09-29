@@ -1,10 +1,134 @@
 import json
 from uuid import uuid4
 
+import pytest
+
 from khipumaq.db import get_database
-from khipumaq.index import EPISODES, ensure_index
+from khipumaq.index import ANALYZER, EPISODES, INDEXED_FIELDS, ensure_index
 from khipumaq.ingest import ingest_file
 from khipumaq.search import search
+
+
+@pytest.fixture
+def search_view():
+    """A real view over private test episodes; never link the live collection."""
+    db = get_database()
+    name = f"test_search_{uuid4().hex}"
+    view = f"{name}_view"
+    col = db.create_collection(name)
+    try:
+        db.create_arangosearch_view(view, properties={
+            "links": {
+                name: {
+                    "fields": {
+                        field: {"analyzers": [ANALYZER]}
+                        for field in INDEXED_FIELDS
+                    }
+                }
+            }
+        })
+        yield db, col, view
+    finally:
+        try:
+            db.delete_view(view, ignore_missing=True)
+        finally:
+            db.delete_collection(name, ignore_missing=True)
+
+
+@pytest.mark.parametrize("other_field", ["response", "state_text"])
+def test_total_all_requires_every_token_across_fields(search_view, other_field):
+    db, col, view = search_view
+    col.insert({"_key": "both", "cycle": 1,
+                "user_message": "heliotrope", other_field: "cantilever"})
+    col.insert({"_key": "partial", "cycle": 2, "response": "heliotrope"})
+    col.insert({"_key": "unrelated", "cycle": 3, "response": "sandbar"})
+
+    result = search(db, "heliotrope cantilever", view=view)
+
+    assert set(result) == {"total", "total_all", "hits"}
+    assert result["total"] == 2
+    assert result["total_all"] == 1
+    assert {hit["key"] for hit in result["hits"]} == {"both", "partial"}
+    limited = search(db, "heliotrope cantilever", view=view, limit=1)
+    assert limited["total"] == 2
+    assert limited["total_all"] == 1
+    assert len(limited["hits"]) == 1
+
+
+def test_total_all_uses_analyzer_to_split_hyphenated_query(search_view):
+    db, col, view = search_view
+    col.insert({"_key": "partial", "cycle": 1, "response": "test"})
+
+    partial = search(db, "ubuntu26-test", view=view)
+    assert partial["total"] == 1
+    assert partial["total_all"] == 0
+    assert [hit["key"] for hit in partial["hits"]] == ["partial"]
+
+    col.insert({"_key": "both", "cycle": 2,
+                "user_message": "ubuntu26", "response": "test"})
+    both = search(db, "ubuntu26-test", view=view)
+    assert both["total"] == 2
+    assert both["total_all"] == 1
+    assert {hit["key"] for hit in both["hits"]} == {"partial", "both"}
+
+
+@pytest.mark.parametrize("filters, expected_all", [
+    ({}, 4),
+    ({"scope": "target"}, 3),
+    ({"since": "2026-06-10T00:00:00Z"}, 3),
+    ({"until": "2026-06-20T00:00:00Z"}, 3),
+    ({"scope": "target", "since": "2026-06-10T00:00:00Z",
+      "until": "2026-06-20T00:00:00Z"}, 1),
+    ({"scope": "missing"}, 0),
+])
+def test_total_all_obeys_scope_and_inclusive_exclusive_window(
+    search_view, filters, expected_all,
+):
+    db, col, view = search_view
+    for cycle, (scope, ts) in enumerate([
+        ("target", "2026-06-09T23:59:59Z"),
+        ("target", "2026-06-10T00:00:00Z"),
+        ("target", "2026-06-20T00:00:00Z"),
+        ("other", "2026-06-15T00:00:00Z"),
+    ]):
+        col.insert({"cycle": cycle, "experiment_label": scope, "ts": ts,
+                    "user_message": "heliotrope", "response": "cantilever"})
+    col.insert({"cycle": 4, "experiment_label": "target",
+                "ts": "2026-06-15T00:00:00Z", "response": "heliotrope"})
+
+    result = search(db, "heliotrope cantilever", view=view, **filters)
+
+    assert result["total_all"] == expected_all
+    expected_total = expected_all + (filters.get("scope") != "missing")
+    assert result["total"] == expected_total
+    assert len(result["hits"]) == expected_total
+
+
+@pytest.mark.parametrize("query", ["", "--- !!!"])
+def test_total_all_is_zero_when_analyzer_drops_every_token(search_view, query):
+    db, col, view = search_view
+    col.insert({"cycle": 1, "response": "heliotrope cantilever"})
+    assert next(db.aql.execute(
+        "RETURN TOKENS(@q, @analyzer)",
+        bind_vars={"q": query, "analyzer": ANALYZER},
+    )) == []
+
+    assert search(db, query, view=view) == {"total": 0, "total_all": 0, "hits": []}
+
+
+def test_repeated_query_words_do_not_change_total_all(search_view):
+    db, col, view = search_view
+    col.insert({"cycle": 1, "user_message": "heliotrope", "response": "cantilever"})
+    col.insert({"cycle": 2, "response": "heliotrope"})
+
+    original = search(db, "heliotrope cantilever", view=view)
+    repeated = search(db, "heliotrope cantilever heliotrope cantilever", view=view)
+
+    assert original["total_all"] == repeated["total_all"] == 1
+    assert original["total"] == repeated["total"] == 2
+    assert {hit["key"] for hit in original["hits"]} == {
+        hit["key"] for hit in repeated["hits"]
+    }
 
 
 def test_search_finds_a_phrase_the_instance_said_in_response(tmp_path):

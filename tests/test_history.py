@@ -54,7 +54,8 @@ def recorder(monkeypatch):
     return QueryHistory(lambda: database, project="test-project"), database
 
 
-def test_search_records_query_window_counts_ranked_hits_and_context(recorder):
+@pytest.mark.parametrize("total_all", [None, 0, 3])
+def test_search_records_query_window_counts_ranked_hits_and_context(recorder, total_all):
     history, database = recorder
     result = {
         "total": 17,
@@ -72,6 +73,9 @@ def test_search_records_query_window_counts_ranked_hits_and_context(recorder):
             },
         ],
     }
+
+    if total_all is not None:
+        result["total_all"] = total_all
 
     history.search(
         query="why did the index change?",
@@ -97,6 +101,7 @@ def test_search_records_query_window_counts_ranked_hits_and_context(recorder):
             "until": "2026-09-24T23:59:59Z",
             "limit": 2,
             "total": 17,
+            "total_all": total_all,
             "returned": 2,
             "hits": [
                 {"key": "episode-b", "rank": 0, "score": 9.5},

@@ -90,8 +90,9 @@ def test_search_tool_returns_envelope_and_honors_time_window(tmp_path):
         result = mcp_server.search(marker, since=since, until=until)
 
         assert isinstance(result, dict)
-        assert set(result) == {"total", "hits"}
+        assert set(result) == {"total", "total_all", "hits"}
         assert result["total"] == 1
+        assert result["total_all"] == 1
         assert [hit["cycle"] for hit in result["hits"]] == [cycles[1]]
     finally:
         for key in keys:
