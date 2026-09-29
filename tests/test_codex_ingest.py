@@ -380,6 +380,73 @@ def test_label_from_path_maps_project_layouts(path, expected):
     assert label_from_path(path) == expected
 
 
+@pytest.mark.parametrize("relative_path", [".", "src/x"])
+def test_label_from_path_follows_renamed_project_symlink(tmp_path, relative_path):
+    project = tmp_path / "projects" / "new"
+    (project / "src" / "x").mkdir(parents=True)
+    old = project.with_name("old")
+    old.symlink_to(project, target_is_directory=True)
+
+    assert label_from_path(old / relative_path) == "new"
+
+
+@pytest.mark.parametrize("relative_path", [".", "src/x"])
+def test_label_from_path_keeps_existing_project_name(tmp_path, relative_path):
+    project = tmp_path / "projects" / "unchanged"
+    (project / "src" / "x").mkdir(parents=True)
+
+    assert label_from_path(project / relative_path) == "unchanged"
+
+
+@pytest.mark.parametrize("relative_path", [".", "src/x"])
+def test_label_from_path_keeps_missing_project_name(tmp_path, relative_path):
+    path = tmp_path / "projects" / "missing" / relative_path
+    assert not path.exists()
+
+    assert label_from_path(path) == "missing"
+
+
+def test_label_from_path_keeps_missing_windows_project_name(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    path = r"C:\Users\u\source\repos\foo"
+    assert not os.path.exists(path)
+    assert not os.path.exists(path.replace("\\", "/"))
+
+    assert label_from_path(path) == "foo"
+
+
+def test_ingest_codex_rollout_labels_symlinked_cwd_by_current_project(tmp_path):
+    project = tmp_path / "projects" / "new"
+    project.mkdir(parents=True)
+    old = project.with_name("old")
+    old.symlink_to(project, target_is_directory=True)
+    session_id = f"codex-rename-{uuid4().hex}"
+    message_id = f"msg_{uuid4().hex}"
+    key = f"{session_id}-{message_id}"
+    path = tmp_path / "rollout-renamed.jsonl"
+    _write_jsonl(
+        path,
+        [
+            _session_meta(session_id, cwd=str(old)),
+            _turn_context("gpt-test"),
+            _message("user", "Explain the rename.", "2026-09-03T10:00:02Z"),
+            _message("assistant", "The project moved.", "2026-09-03T10:00:03Z", message_id),
+        ],
+    )
+    db = get_database()
+    ensure_index(db)
+    collection = db.collection(EPISODES)
+    try:
+        assert ingest_codex_rollout(db, path) == 1
+
+        episode = collection.get(key)
+        assert episode["experiment_label"] == "new"
+        assert episode["codex"]["cwd"] == str(old)
+        assert episode["response"] == "The project moved."
+    finally:
+        _delete_if_present(collection, [key])
+
+
 def test_sweep_ingests_only_fresh_claude_and_codex_files_with_derived_labels(
     tmp_path,
 ):
