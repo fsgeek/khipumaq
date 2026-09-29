@@ -48,6 +48,21 @@ server you control (a local container is fine) with a database and a user
 that can read and write it. khipumaq creates its collection and search view on
 first use.
 
+ArangoDB now ships one edition: the Enterprise build, which runs without a
+license for databases up to 100 GB. Install it from
+[ArangoDB's downloads](https://arangodb.com/download-major/); the older
+community apt repository stops at 3.12.4 and is signed with a key whose
+published copy has expired. To create the database and its user, as ArangoDB's
+root user on a new server, or by whoever administers an existing one:
+
+```sh
+curl -u root -X POST http://127.0.0.1:8529/_api/database \
+  -d '{"name":"khipumaq","users":[{"username":"khipumaq","passwd":"..."}]}'
+```
+
+khipumaq needs nothing beyond read and write on that one database, so every
+machine that should share a store gets the same config file (step 1).
+
 1. Write `~/.config/khipumaq/db-config.ini` (mode 0600):
 
    ```ini
