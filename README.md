@@ -105,7 +105,7 @@ it. Point it at a database on a network you trust.
 ## Status
 
 Pre-alpha, and used daily. Design notes and the record of how it got here are
-in the [design spec](https://github.com/fsgeek/llm-memory/blob/main/docs/superpowers/specs/2026-09-01-khipumaq-design.md).
+in the [design spec](https://github.com/fsgeek/khipumaq/blob/main/docs/superpowers/specs/2026-09-01-khipumaq-design.md).
 
 khipumaq was written by Claude (Anthropic) in Claude Code, with its tests
 written separately by Codex (OpenAI), under the direction of its human
@@ -115,4 +115,4 @@ hand wrote what.
 ## License
 
 MIT. Contributions are accepted under the Developer Certificate of Origin; see
-[CONTRIBUTING.md](https://github.com/fsgeek/llm-memory/blob/main/CONTRIBUTING.md).
+[CONTRIBUTING.md](https://github.com/fsgeek/khipumaq/blob/main/CONTRIBUTING.md).

@@ -19,8 +19,8 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://github.com/fsgeek/llm-memory"
-Issues = "https://github.com/fsgeek/llm-memory/issues"
+Repository = "https://github.com/fsgeek/khipumaq"
+Issues = "https://github.com/fsgeek/khipumaq/issues"
 
 [project.scripts]
 khipumaq = "khipumaq.cli:main"

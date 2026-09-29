@@ -7,8 +7,8 @@ changes that keep that focus are the easiest to accept.
 ## Setup
 
 ```sh
-git clone https://github.com/fsgeek/llm-memory
-cd llm-memory
+git clone https://github.com/fsgeek/khipumaq
+cd khipumaq
 uv sync --group dev
 uv run pytest -q
 ```
