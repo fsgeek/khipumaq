@@ -498,6 +498,9 @@ def main(argv=None):
     if not path.is_file():
         print(f"claude-session: transcript not found: {path}", file=sys.stderr)
         return 2
+    # A session begun before its project was renamed reports the old,
+    # now-symlinked directory; record the one the sweep reads (A25).
+    path = path.resolve()
     label = args.label or label_from_project_dir(path.parent.name)
     host = args.host or socket.gethostname()
     machine_id = args.machine_id or read_machine_id()

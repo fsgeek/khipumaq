@@ -585,6 +585,9 @@ recorded where ingest can see it:
 - `label_from_path` labels a project directory that is a symlink by its
   target, so an old Codex rollout whose `cwd` is `…/llm-memory` re-ingests as
   `khipumaq`.
+- the Claude SessionEnd hook resolves the transcript path first, so a
+  session begun before the move, which still reports the old directory, is
+  labelled and recorded as the sweep would.
 The existing `llm-memory` episodes were relabelled `khipumaq` in the store
 (label only; the list of changed keys is kept beside the backup), so the
 project's history answers to one name. Without the two rules above, the next
