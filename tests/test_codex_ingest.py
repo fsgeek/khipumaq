@@ -2,6 +2,7 @@ import io
 import json
 import os
 import sys
+from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
@@ -501,6 +502,64 @@ def test_sweep_ingests_only_fresh_claude_and_codex_files_with_derived_labels(
         )
         assert not collection.has(old_claude_uuid)
         assert not collection.has(old_codex_key)
+    finally:
+        _delete_if_present(collection, keys)
+
+
+def test_sweep_skips_symlinked_claude_project_after_rename(tmp_path):
+    db = get_database()
+    ensure_index(db)
+    collection = db.collection(EPISODES)
+    claude_root = tmp_path / "claude-projects"
+    transcript = claude_root / "-home-u-projects-new" / "s.jsonl"
+    session_id = str(uuid4())
+    keys = [str(uuid4()), str(uuid4())]
+    _write_jsonl(
+        transcript,
+        [
+            {
+                "type": "user",
+                "sessionId": session_id,
+                "timestamp": "2026-09-23T10:00:00Z",
+                "message": {"role": "user", "content": "Explain the rename."},
+            },
+            *[
+                {
+                    "type": "assistant",
+                    "sessionId": session_id,
+                    "uuid": key,
+                    "timestamp": f"2026-09-23T10:00:0{turn}Z",
+                    "message": {
+                        "role": "assistant",
+                        "model": "claude-test",
+                        "content": [{"type": "text", "text": f"Rename step {turn}."}],
+                    },
+                }
+                for turn, key in enumerate(keys, start=1)
+            ],
+        ],
+    )
+    # The old name sorts last, so reading it would overwrite the new label.
+    (claude_root / "-home-u-projects-old").symlink_to(
+        transcript.parent.name, target_is_directory=True
+    )
+
+    try:
+        with patch("khipumaq.ingest.open", wraps=open, create=True) as read_file:
+            result = sweep(
+                db,
+                claude_root,
+                tmp_path / "missing-codex",
+                host="sweep-host",
+                machine_id="sweep-machine",
+            )
+
+        read_file.assert_called_once_with(transcript)
+        assert result == {"claude": (1, 2), "codex": (0, 0)}
+        for key in keys:
+            episode = collection.get(key)
+            assert episode["experiment_label"] == "new"
+            assert episode["source_file"] == str(transcript)
     finally:
         _delete_if_present(collection, keys)
 
