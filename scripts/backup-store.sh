@@ -7,7 +7,8 @@
 #      database the primary will one day move to
 #   3. restic backup $BACKUP_ROOT to the remote repository (encrypted,
 #      deduplicated), then apply the retention policy
-# Then verify: the replica's episode count equals the primary's. Local dump
+# Then verify: the replica's episode count equals the primary's, and its content
+# equals the dump's, collection by collection. Local dump
 # directories older than 30 days are removed unless dated the 1st of a month.
 set -euo pipefail
 GIT_ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -45,6 +46,47 @@ n2 = ArangoClient(hosts=f"http://{rhost}").db(db, username=user, password=pw).co
 print(f"primary {n1} episodes, replica {n2}")
 if n1 != n2:
     raise SystemExit("VERIFY FAILED: replica count differs from primary")
+EOF
+
+echo "[3b/4] verify content: replica equals the dump, collection by collection"
+# The primary keeps taking ingests while this runs, so it is compared by count
+# only; what must hold exactly is that the replica is the dump. Both sides are
+# hashed the same way: each document without _rev/_id (restore may reissue
+# them), as a digest of canonical JSON, in _key order.
+"$GIT_ROOT/.venv/bin/python" - "$DIR" "$DB" "$USER" "$PW" "$REPLICA_ENDPOINT" <<'EOF'
+import gzip, hashlib, json, sys
+from pathlib import Path
+from arango import ArangoClient
+dump, db, user, pw, replica = sys.argv[1:]
+def canon(doc):
+    doc = {k: v for k, v in doc.items() if k not in ("_rev", "_id")}
+    text = json.dumps(doc, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(text.encode()).hexdigest()
+files = {}
+for f in Path(dump).glob("*.data.json.gz"):
+    files.setdefault(f.name.split(".data.json.gz")[0].rsplit("_", 1)[0], []).append(f)
+rdb = ArangoClient(hosts=f"http://{replica.split('://', 1)[1]}").db(db, username=user, password=pw)
+failed = False
+for name, paths in sorted(files.items()):
+    docs = {}
+    for f in paths:
+        with gzip.open(f, "rt") as fh:
+            for line in fh:
+                if line.strip():
+                    d = json.loads(line)
+                    docs[d["_key"]] = canon(d)
+    h1 = hashlib.sha256("".join(k + docs[k] for k in sorted(docs)).encode()).hexdigest()
+    rdocs = {d["_key"]: canon(d) for d in rdb.aql.execute(
+        "FOR d IN @@c RETURN d", bind_vars={"@c": name}, batch_size=1000, stream=True)}
+    h2 = hashlib.sha256("".join(k + rdocs[k] for k in sorted(rdocs)).encode()).hexdigest()
+    ok = h1 == h2
+    failed |= not ok
+    print(f"{name}: dump {len(docs)} docs {h1[:16]}, replica {len(rdocs)} docs {h2[:16]} {'ok' if ok else 'DIFFERS'}")
+    if not ok:
+        diff = sorted(k for k in docs.keys() | rdocs.keys() if docs.get(k) != rdocs.get(k))
+        print(f"  {len(diff)} keys differ, first: {diff[:5]}")
+if failed:
+    raise SystemExit("VERIFY FAILED: replica content differs from the dump")
 EOF
 
 echo "[4/4] restic -> $RESTIC_REPOSITORY"
