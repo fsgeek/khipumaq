@@ -65,9 +65,11 @@ def search(
     `scope` restricts to one project label (see `describe`); "all" searches
     everything. `since`/`until` are ISO dates bounding the episode timestamp;
     a week or a month usually cuts the candidates by an order of magnitude.
-    Returns {"total": N, "hits": [...]}: `total` is how many episodes matched
-    before `limit`, so if it is in the thousands, narrow with `scope` or
-    `since` rather than trust the top ten. Hits carry `key`, `score`, `ts`,
+    Returns {"total": N, "total_all": M, "hits": [...]}: `total` is how many
+    episodes hold any query word, `total_all` how many hold every one. Hits are
+    ranked over any word; if `total_all` is in the thousands, narrow with
+    `scope` or `since` rather than trust the top ten, and if it is 0, the
+    words never met in one turn, so try fewer. Hits carry `key`, `score`, `ts`,
     `experiment_label`, `source_file`, and a 200-char snippet; pass `key` to
     `recall` for the whole episode."""
     result, elapsed = timed(_search, get_database(), query, scope=scope, limit=limit, since=since, until=until)

@@ -21,6 +21,17 @@ FOR doc IN @@view
            state_text: doc.state_text }
 """
 
+_COUNT_ALL = """
+FOR doc IN @@view
+  SEARCH ANALYZER(__ALL_TOKENS__, @analyzer)
+  OPTIONS { waitForSync: true }
+  __SCOPE_FILTER__
+  __SINCE_FILTER__
+  __UNTIL_FILTER__
+  COLLECT WITH COUNT INTO n
+  RETURN n
+"""
+
 _FIELDS = ("response", "user_message", "state_text")
 
 
@@ -59,20 +70,10 @@ def search(db, query, scope="all", limit=10, view=VIEW, since=None, until=None):
     inclusive/exclusive). Returns {"total": N, "hits": [...]}: `total` is how
     many episodes matched before LIMIT, so a caller can see it is looking at
     ten of eight thousand and narrow, rather than mistake the page for the
-    answer (amendment A7)."""
+    answer (amendment A7). `total_all` counts only episodes holding every
+    query word (A26)."""
     bind_vars = {"@view": view, "q": query, "analyzer": ANALYZER, "limit": limit}
-    aql = _AQL
-    filters = {
-        "__SCOPE_FILTER__": ("FILTER doc.experiment_label == @scope", "scope", None if scope == "all" else scope),
-        "__SINCE_FILTER__": ("FILTER doc.ts >= @since", "since", since),
-        "__UNTIL_FILTER__": ("FILTER doc.ts < @until", "until", until),
-    }
-    for marker, (clause, name, value) in filters.items():
-        if value is None:
-            aql = aql.replace(f"  {marker}\n", "")
-        else:
-            aql = aql.replace(marker, clause)
-            bind_vars[name] = value
+    aql = _with_filters(_AQL, bind_vars, scope, since, until)
     cursor = db.aql.execute(aql, bind_vars=bind_vars, full_count=True)
     hits = []
     for doc in cursor:
@@ -92,4 +93,40 @@ def search(db, query, scope="all", limit=10, view=VIEW, since=None, until=None):
                 "snippet": snippet,
             }
         )
-    return {"total": cursor.statistics()["fullCount"], "hits": hits}
+    return {"total": cursor.statistics()["fullCount"],
+            "total_all": _count_all(db, query, view, scope, since, until),
+            "hits": hits}
+
+
+def _with_filters(aql, bind_vars, scope, since, until):
+    filters = {
+        "__SCOPE_FILTER__": ("FILTER doc.experiment_label == @scope", "scope", None if scope == "all" else scope),
+        "__SINCE_FILTER__": ("FILTER doc.ts >= @since", "since", since),
+        "__UNTIL_FILTER__": ("FILTER doc.ts < @until", "until", until),
+    }
+    for marker, (clause, name, value) in filters.items():
+        if value is None:
+            aql = aql.replace(f"  {marker}\n", "")
+        else:
+            aql = aql.replace(marker, clause)
+            bind_vars[name] = value
+    return aql
+
+
+def _count_all(db, query, view, scope, since, until):
+    """How many episodes hold every word of the query, each in any field
+    (A26). `total` counts episodes holding any word, so for the usual query,
+    a handful of keywords, it measures the commonest word: "ubuntu26-test"
+    matched every episode that says "test". Same analyzer, so stemming and
+    stopwords count as they do for ranking."""
+    tokens = list(dict.fromkeys(next(db.aql.execute(
+        "RETURN TOKENS(@q, @analyzer)", bind_vars={"q": query, "analyzer": ANALYZER}))))
+    if not tokens:
+        return 0
+    bind_vars = {"@view": view, "analyzer": ANALYZER}
+    clauses = []
+    for i, token in enumerate(tokens):
+        bind_vars[f"t{i}"] = token
+        clauses.append("(" + " OR ".join(f"doc.{f} == @t{i}" for f in _FIELDS) + ")")
+    aql = _with_filters(_COUNT_ALL.replace("__ALL_TOKENS__", " AND ".join(clauses)), bind_vars, scope, since, until)
+    return next(db.aql.execute(aql, bind_vars=bind_vars))

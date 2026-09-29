@@ -82,6 +82,7 @@ class QueryHistory:
                 "until": until,
                 "limit": limit,
                 "total": result["total"],
+                "total_all": result.get("total_all"),
                 "returned": len(result["hits"]),
                 "hits": hits,
                 "elapsed_ms": round(elapsed * 1000, 1),

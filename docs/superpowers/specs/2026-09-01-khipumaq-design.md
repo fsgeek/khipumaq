@@ -592,3 +592,18 @@ The existing `llm-memory` episodes were relabelled `khipumaq` in the store
 (label only; the list of changed keys is kept beside the backup), so the
 project's history answers to one name. Without the two rules above, the next
 `sweep --all` would have undone that.
+
+**A26 — `search` also returns `total_all`: episodes holding every query
+word.** `total` (A7) counts episodes holding any word, and the tool text told
+instances to judge by it. The query log (A23) shows what they send: 49
+searches from 13 sessions, most of them four to eight keywords. For those,
+`total` measures the commonest word, not the query: "If you could be
+anything in the universe…" matched 36,672 of 39,188 episodes, and
+"ubuntu26-test" 14,945, because the analyzer splits it and "test" is
+everywhere. `total_all` requires each token, in any of the three searched
+fields, under the same analyzer; for those two it is 37 and 1. `total` and the
+BM25 ranking over any word are unchanged, so nothing reading them breaks; the
+tool text now points at `total_all` for the narrow-or-not decision, and says
+what a 0 means. The query log records both. Measured before the change with
+`search()` against the live store on 2026-09-29.
+
