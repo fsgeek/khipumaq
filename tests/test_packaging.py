@@ -60,6 +60,6 @@ def test_package_supports_python_3_11_and_newer():
 
 def test_package_metadata_links_to_repository_and_issues():
     assert _project_metadata()["urls"] == {
-        "Repository": "https://github.com/fsgeek/llm-memory",
-        "Issues": "https://github.com/fsgeek/llm-memory/issues",
+        "Repository": "https://github.com/fsgeek/khipumaq",
+        "Issues": "https://github.com/fsgeek/khipumaq/issues",
     }
