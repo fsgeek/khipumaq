@@ -755,6 +755,52 @@ def test_main_hook_mode_reads_transcript_path_from_stdin(tmp_path, monkeypatch):
         _delete_if_present(collection, keys_to_clean)
 
 
+def test_main_hook_mode_resolves_renamed_project_symlink(tmp_path, monkeypatch):
+    db = get_database()
+    ensure_index(db)
+    collection = db.collection(EPISODES)
+    session_id = str(uuid4())
+    assistant_uuid = str(uuid4())
+    project = tmp_path / "claude" / "-home-u-projects-new"
+    old_project = project.with_name("-home-u-projects-old")
+    path = project / f"{session_id}.jsonl"
+    keys_to_clean = {assistant_uuid, f"{session_id}-{assistant_uuid}"}
+    try:
+        _write_jsonl(
+            path,
+            [
+                _user_record(session_id, "renamed project prompt"),
+                _assistant_record(session_id, assistant_uuid, "renamed project response"),
+            ],
+        )
+        old_project.symlink_to(project, target_is_directory=True)
+        monkeypatch.setattr(
+            sys,
+            "stdin",
+            io.StringIO(
+                json.dumps({"transcript_path": str(old_project / path.name)})
+            ),
+        )
+
+        result = main(
+            [
+                "claude-session",
+                "--host",
+                "hook-host",
+                "--machine-id",
+                "hook-machine",
+            ]
+        )
+
+        assert result == 0
+        episode = collection.get(assistant_uuid)
+        assert episode["response"] == "renamed project response"
+        assert episode["experiment_label"] == "new"
+        assert episode["source_file"] == str(path)
+    finally:
+        _delete_if_present(collection, keys_to_clean)
+
+
 def test_installed_hook_command_imports_from_foreign_cwd_without_pythonpath(
     tmp_path,
 ):
