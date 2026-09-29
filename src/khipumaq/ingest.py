@@ -434,9 +434,12 @@ def sweep(db, claude_root, codex_root, since=None, host=None, machine_id=None, c
     D3/D4). This is the retry for hooks that failed. `canonical` maps each path
     read to the path recorded; `label`, when given, overrides the derived one
     (a tree whose location says more than its directory names, like Cowork's).
+    A project directory that is a symlink is skipped: its target is swept under
+    its own name, and reading both would relabel the same episodes by whichever
+    name sorts last (a renamed project left behind a link to its new name).
     Returns {"claude": (files, episodes), "codex": (files, episodes)}."""
     fresh = lambda f: since is None or f.stat().st_mtime >= since
-    claude = [f for f in sorted(Path(claude_root).glob("*/*.jsonl")) if fresh(f)] if claude_root and Path(claude_root).is_dir() else []
+    claude = [f for f in sorted(Path(claude_root).glob("*/*.jsonl")) if fresh(f) and not f.parent.is_symlink()] if claude_root and Path(claude_root).is_dir() else []
     codex = [f for f in codex_rollout_files(codex_root) if fresh(f)] if codex_root and Path(codex_root).is_dir() else []
     claude_count = sum(
         ingest_claude_session(db, f, label or label_from_project_dir(f.parent.name),
