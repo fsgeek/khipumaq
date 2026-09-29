@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import socket
 from pathlib import Path
@@ -48,10 +49,16 @@ def label_from_path(path):
     into the project: `…/projects/cpsc416/tmp/capstone/<student>` is
     `cpsc416`, not one label per student. The full path stays on the episode
     (`codex.cwd`). An encoded project directory name has lost its separators,
-    so `label_from_project_dir` cannot do the same."""
+    so `label_from_project_dir` cannot do the same.
+
+    A project directory that is now a symlink was renamed: label by its
+    target, so re-ingesting an old rollout keeps the project's current name."""
     path = str(path).replace("\\", "/")
     m = re.match(r"(.*/(?:projects|source/repos|Documents/Claude/Projects)/[^/]+)", path)
-    return label_from_project_dir(re.sub(r"[^A-Za-z0-9]", "-", m.group(1) if m else path))
+    root = m.group(1) if m else path
+    if os.path.islink(root):
+        root = os.path.realpath(root)
+    return label_from_project_dir(re.sub(r"[^A-Za-z0-9]", "-", root))
 
 
 def record_to_episode(record, source_file):

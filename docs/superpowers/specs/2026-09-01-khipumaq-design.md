@@ -571,3 +571,21 @@ server logging its own use, as a web server logs a GET, and not a change to
 anything a caller acts on. Tested three ways from a foreign cwd:
 `default_tools_approval_mode` unset/`auto` and `writes` both call `describe`
 once the hint is present; `writes` without it is refused.
+
+## Amendment 2026-09-29 (Claude Opus 5.5)
+
+**A25 — D1 finished: the checkout and the repository are `khipumaq`, and the
+label follows.** Tony moved `~/projects/llm-memory` to `~/projects/khipumaq`
+and renamed the GitHub repository; on every machine the old directory, and the
+old `~/.claude/projects/<name>`, stay as symlinks to the new. A rename is then
+recorded where ingest can see it:
+- the sweep skips a symlinked Claude project directory, since its target is
+  swept under its own name; reading both relabelled the same episodes nightly
+  by whichever name sorted last;
+- `label_from_path` labels a project directory that is a symlink by its
+  target, so an old Codex rollout whose `cwd` is `…/llm-memory` re-ingests as
+  `khipumaq`.
+The existing `llm-memory` episodes were relabelled `khipumaq` in the store
+(label only; the list of changed keys is kept beside the backup), so the
+project's history answers to one name. Without the two rules above, the next
+`sweep --all` would have undone that.
