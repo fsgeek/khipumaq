@@ -1,10 +1,14 @@
+import base64
+import hashlib
 import json
 import os
 import re
 import socket
 from pathlib import Path
 
-from khipumaq.index import EPISODES
+from arango.exceptions import CollectionCreateError
+
+from khipumaq.index import EPISODES, RAW
 from khipumaq.observability import emit_ingest_event
 from khipumaq.schema import flatten_state
 
@@ -236,14 +240,59 @@ def claude_session_files(path):
     return [path] + sorted(subagents.glob("*.jsonl"))
 
 
+def raw_documents(path, kind, host=None, machine_id=None, canonical=str):
+    """Every complete line of a source file, verbatim, one document each
+    (A27). Episodes keep the prose; this keeps everything else too: usage,
+    tool calls and results, tool-only turns, every Codex event. Split on
+    bytes, so the file rebuilds exactly from the lines in order; a last line
+    with no newline is still being written and waits for the next pass. A
+    line that is not UTF-8 is kept as base64, not dropped."""
+    source = canonical(path)
+    parts = Path(path).read_bytes().split(b"\n")
+    parts.pop()  # b"" after a final newline, else the unfinished line
+    for n, line in enumerate(parts):
+        doc = {
+            "_key": hashlib.sha256(f"{host}\0{source}\0{n}".encode()).hexdigest()[:32],
+            "kind": kind,
+            "host": host,
+            "machine_id": machine_id,
+            "source_file": source,
+            "line": n,
+        }
+        try:
+            doc["text"] = line.decode("utf-8")
+        except UnicodeDecodeError:
+            doc["b64"] = base64.b64encode(line).decode("ascii")
+        yield doc
+
+
+def ingest_raw(db, path, kind, dry_run=False, host=None, machine_id=None, canonical=str):
+    """Store `raw_documents` for one file, replacing any earlier copy of the
+    same lines (a resumed session re-ingests its whole file). `raw` is not in
+    the search view: how a turn was produced is not what was said (A27).
+    Returns the line count."""
+    docs = list(raw_documents(path, kind, host=host, machine_id=machine_id, canonical=canonical))
+    if docs and not dry_run:
+        if not db.has_collection(RAW):
+            try:
+                db.create_collection(RAW)
+            except CollectionCreateError:
+                if not db.has_collection(RAW):  # lost a race with another ingest
+                    raise
+        db.collection(RAW).import_bulk(docs, on_duplicate="replace", batch_size=1000)
+    return len(docs)
+
+
 def ingest_claude_session(db, path, experiment_label, dry_run=False, host=None, machine_id=None, canonical=str):
     """Load one Claude Code session (project JSONL plus its subagent
     transcripts) into the episodes collection. One episode per prose assistant
     turn. Idempotent per assistant uuid. When dry_run, counts what WOULD be
-    inserted without writing. Returns the count."""
+    inserted without writing. Returns the count. Every line of every file
+    also goes to `raw` (A27)."""
     col = db.collection(EPISODES)
     count = 0
     for file in claude_session_files(path):
+        ingest_raw(db, file, "claude", dry_run=dry_run, host=host, machine_id=machine_id, canonical=canonical)
         for episode in claude_session_to_episodes(file, experiment_label, host=host, machine_id=machine_id, canonical=canonical):
             if not dry_run:
                 col.insert(episode, overwrite=True)
@@ -424,7 +473,9 @@ def codex_rollout_files(root):
 
 def ingest_codex_rollout(db, path, experiment_label=None, dry_run=False, host=None, machine_id=None, canonical=str):
     """Load one Codex rollout into the episodes collection. Idempotent per
-    (session, message id). Returns the count."""
+    (session, message id). Returns the count. Every line of the rollout also
+    goes to `raw` (A27)."""
+    ingest_raw(db, path, "codex", dry_run=dry_run, host=host, machine_id=machine_id, canonical=canonical)
     col = db.collection(EPISODES)
     count = 0
     for episode in codex_rollout_to_episodes(path, experiment_label, host=host, machine_id=machine_id, canonical=canonical):

@@ -1,4 +1,5 @@
 EPISODES = "episodes"
+RAW = "raw"  # every source line, verbatim; never in VIEW (A27)
 VIEW = "episodes_search"
 # The fix: index conversation (both sides) AND flattened state — not state alone.
 INDEXED_FIELDS = ["user_message", "response", "state_text"]

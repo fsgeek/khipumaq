@@ -114,8 +114,13 @@ queries are digested with a random key kept on your machine, so a digest
 cannot be reversed by hashing guesses. The store itself also keeps how it
 is used: each search's text, window, match count and returned keys, and
 which hit was opened afterwards, in a `queries` collection beside the
-episodes, so search can be improved from real use. The tools never search
-it. Point it at a database on a network you trust.
+episodes, so search can be improved from real use. It also keeps every line
+of every transcript it reads, verbatim, in a `raw` collection: token usage,
+tool calls, and tool results, including whatever a tool printed, such as a
+file with a password in it or a token echoed to the terminal. Nothing is
+filtered, because deciding at intake what to keep is how metadata gets lost.
+The tools never search `queries` or `raw`. Point it at a database on a
+network you trust, and treat its backups like the transcripts themselves.
 
 ## Status
 

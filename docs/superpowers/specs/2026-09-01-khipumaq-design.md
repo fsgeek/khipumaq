@@ -607,3 +607,42 @@ tool text now points at `total_all` for the narrow-or-not decision, and says
 what a 0 means. The query log records both. Measured before the change with
 `search()` against the live store on 2026-09-29.
 
+
+## Amendment 2026-09-30 (Claude Opus 5.5, issue #1)
+
+**A27 — Ingest keeps every source line, verbatim, in `raw`.** Issue #1, from
+the instance that owns yanantin: ingest kept each turn's words and dropped
+everything around them (`message.usage`, tool calls and results, tool-use-only
+turns, every Codex event but messages). Claude Code deletes transcripts after
+30 days, so the drop was permanent: of 39,052 episodes, 45 held any
+prompt-cache field, and usage for March–August 2026 appears lost. It is the
+third time an ayllu collector threw away metadata at intake, and the earlier
+lessons sat in yanantin's memory, which this ingest's author never saw.
+Choosing what to keep at intake is the summarising khipumaq exists to refuse,
+one level down.
+
+- **One document per source line** in a `raw` collection, for every Claude
+  Code transcript (and subagent transcript) and Codex rollout that ingest
+  reads, by hook, sweep, or CLI. `text` is the line exactly; a line that is not
+  UTF-8 is kept as `b64`. The key hashes host, recorded source path, and line
+  number, so re-ingesting a growing session replaces its lines in place. A
+  last line without a newline is still being written; it waits for the next
+  pass.
+- **`raw` is not in `episodes_search`.** Like `queries` (A23): how a turn was
+  produced is not what was said, and search results that include tool output
+  are read as evidence (the June `_activity_log` confound).
+- **Episodes are unchanged.** A tool-use-only turn is in `raw`, not an episode
+  with an empty response; an episode stays what was said paired with what was
+  answered (A21).
+- **The test is coverage and reconstruction:** every line of a fixture file is
+  in `raw`, and the file rebuilds byte for byte from the lines in order. It
+  fails the moment ingest skips a line or a record type — the recurrence the
+  issue says notes did not stop.
+- **The cost:** tool results hold whatever was printed, tokens and config
+  files included, and now the store, the replica, and the offsite backup keep
+  them. Filtering would be discarding at intake again; the README says so.
+
+Backfill: `sweep --all` on each machine, and the 1,639 archived transcripts in
+yanantin's `~/.yanantin/corpus/claude-projects/<machine>/`, recorded under the
+path and host they came from. `cleanupPeriodDays: 3650` is set on all three
+machines (wam-nuc on 2026-09-30).
