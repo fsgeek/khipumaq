@@ -267,7 +267,19 @@ def test_mcp_instructions_promote_search():
 
     assert isinstance(exposed, str)
     assert exposed
-    assert "search() first" in exposed
+    # The isolated suite starts empty; never depend on a populated live store.
+    assert "search()" in exposed
+    assert "no episodes yet" in exposed
+
+    db = get_database()
+    collection = db.collection(EPISODES)
+    key = f"startup-instructions-{uuid4().hex}"
+    try:
+        collection.insert({"_key": key, "ts": datetime.now(UTC).isoformat(),
+                           "experiment_label": "startup-test", "host": "fixture"})
+        assert "search() first" in mcp_server._self_description()
+    finally:
+        collection.delete(key, ignore_missing=True)
 
 
 def test_mcp_exposes_describe_tool_and_returns_the_census():
