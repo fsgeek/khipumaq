@@ -10,6 +10,7 @@ from khipumaq import mcp_server
 from khipumaq.db import get_database
 from khipumaq.index import EPISODES, ensure_index
 from khipumaq.ingest import ingest_file
+from khipumaq.recall import recall
 
 
 @pytest.fixture(autouse=True)
@@ -59,6 +60,46 @@ def test_search_tool_then_recall_tool_is_a_full_reach(tmp_path):
     finally:
         if col.has(key):
             col.delete(key)
+
+
+def test_recall_tool_returns_same_then_as_function(isolated_database, stored_episode):
+    """A28 survives the MCP wrapper, including previews and the overflow count."""
+    db, _ = isolated_database
+    session = uuid4().hex
+    episode = stored_episode(
+        session_id=session, ts="2026-10-01T12:00:00Z",
+        user_message="original question", response="original answer",
+    )
+    later = [
+        stored_episode(
+            session_id=session, ts=f"2026-10-01T12:{minute:02d}:00Z",
+            user_message=f"question {minute} " + "ñ" * 220,
+            response=f"answer {minute} " + "答" * 220,
+        )
+        for minute in range(1, 5)
+    ]
+
+    expected = recall(db, episode["_key"])
+    result = mcp_server.recall(episode["_key"])
+    content, structured = asyncio.run(
+        mcp_server.mcp.call_tool("recall", {"key": episode["_key"]})
+    )
+
+    assert expected["then"] == {
+        "turns": [
+            {
+                "key": turn["_key"], "ts": turn["ts"],
+                "user_message": turn["user_message"][:200],
+                "response": turn["response"][:200],
+            }
+            for turn in later[:3]
+        ],
+        "more": 1,
+    }
+    assert result["then"] == expected["then"]
+    assert result == expected
+    assert json.loads(content[0].text) == expected
+    assert structured["result"] == expected
 
 
 def test_search_tool_returns_envelope_and_honors_time_window(tmp_path):

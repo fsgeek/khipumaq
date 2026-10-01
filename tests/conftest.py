@@ -115,6 +115,26 @@ def isolated_database(request):
     return request.config._isolated_database
 
 
+@pytest.fixture
+def stored_episode(isolated_database):
+    """Insert A28 documents into the suite's private collection and remove them."""
+    db, _ = isolated_database
+    col = db.collection(index.EPISODES)
+    keys = []
+
+    def insert(**fields):
+        document = {"_key": f"a28_{uuid4().hex}", **fields}
+        col.insert(document)
+        keys.append(document["_key"])
+        return col.get(document["_key"])
+
+    try:
+        yield insert
+    finally:
+        for key in keys:
+            col.delete(key, ignore_missing=True)
+
+
 @pytest.fixture(autouse=True)
 def isolate_user_directories(tmp_path, monkeypatch):
     home = tmp_path / "home"

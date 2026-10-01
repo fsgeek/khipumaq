@@ -116,7 +116,24 @@ def test_ensure_store_leaves_existing_collection_unchanged(monkeypatch):
             assert name == index.EPISODES
             return Collection()
 
-    monkeypatch.setattr(db, "get_database", ExistingDatabase)
+        def create_collection(self, *args, **kwargs):
+            raise AssertionError("existing collection must not be recreated")
+
+        def views(self):
+            raise AssertionError("existing search view must not be inspected")
+
+        def create_arangosearch_view(self, *args, **kwargs):
+            raise AssertionError("existing search view must not be recreated")
+
+        def update_arangosearch_view(self, *args, **kwargs):
+            raise AssertionError("existing search view must not be updated")
+
+    fake_db = ExistingDatabase()
+    threaded = []
+    monkeypatch.setattr(db, "get_database", lambda: fake_db)
+    monkeypatch.setattr(
+        index, "ensure_thread_index", lambda database: threaded.append(database)
+    )
     monkeypatch.setattr(
         index,
         "ensure_index",
@@ -126,6 +143,7 @@ def test_ensure_store_leaves_existing_collection_unchanged(monkeypatch):
     )
 
     assert cli._ensure_store() == 0
+    assert threaded == [fake_db]
 
 
 def test_ensure_store_returns_one_when_database_is_unreachable(monkeypatch, capsys):
