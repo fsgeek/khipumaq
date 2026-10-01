@@ -90,7 +90,10 @@ def search(
 def recall(key: str) -> dict | None:
     """Read one episode in full by the `key` from a search hit: the user's
     message, the assistant's whole response, timestamp, model, project label,
-    host, and source file. Null if no episode has that key."""
+    host, and source file. Null if no episode has that key. `then` shows what
+    the same session said next (`turns`, and `more` for the rest): read it
+    before relying on a claim, because sessions often correct themselves
+    minutes later without the earlier turn saying so."""
     episode = _recall(get_database(), key)
     emit_recall_event(key=key, found=episode is not None)
     history.recall(key=key, found=episode is not None)

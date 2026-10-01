@@ -21,9 +21,16 @@ def ensure_index(db):
     ArangoSearch view exist."""
     if not db.has_collection(EPISODES):
         db.create_collection(EPISODES)
+    ensure_thread_index(db)
 
     props = _view_properties()
     if VIEW in [v["name"] for v in db.views()]:
         db.update_arangosearch_view(VIEW, props)
     else:
         db.create_arangosearch_view(VIEW, properties=props)
+
+
+def ensure_thread_index(db):
+    """Idempotently index episodes by (session_id, ts), so `recall` can show
+    what the same session said next (A28)."""
+    db.collection(EPISODES).add_index({"type": "persistent", "fields": ["session_id", "ts"]})

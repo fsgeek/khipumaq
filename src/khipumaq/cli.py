@@ -161,11 +161,12 @@ def _ensure_store():
     """Create the episodes collection and its search view on a fresh database;
     an existing store is left as it is."""
     from khipumaq.db import get_database
-    from khipumaq.index import EPISODES, ensure_index
+    from khipumaq.index import EPISODES, ensure_index, ensure_thread_index
 
     try:
         db = get_database()
         if db.has_collection(EPISODES):
+            ensure_thread_index(db)
             print(f"khipumaq: store reachable, {db.collection(EPISODES).count():,} episodes.")
         else:
             ensure_index(db)

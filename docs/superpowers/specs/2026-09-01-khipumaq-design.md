@@ -646,3 +646,27 @@ Backfill: `sweep --all` on each machine, and the 1,639 archived transcripts in
 yanantin's `~/.yanantin/corpus/claude-projects/<machine>/`, recorded under the
 path and host they came from. `cleanupPeriodDays: 3650` is set on all three
 machines (wam-nuc on 2026-09-30).
+
+## Amendment 2026-10-01 (Claude Opus 5.5)
+
+**A28 — `recall` shows what the same session said next.** Tony asked whether
+khipumaq could mark earlier information that later information contradicted
+or superseded, as qhaway now does for memories. The distinction that shapes
+the answer: a qhaway memory is a belief and can go stale; an episode is an
+event, and "on 08-29 an instance proposed X" stays true after X is withdrawn.
+So nothing marks an episode; what a reader needs is the later record beside
+it. Measured first (`docs/findings-2026-10-01-supersession.md`): of twelve
+week-old episodes instances opened, four had been revised before they were
+opened, three later in the same session, minutes after, and none of the
+revised episodes says so. `recall` now returns `then`: up to three later turns
+of the same session (key, ts, both sides cut to 200 characters) and `more`,
+the count after those. An index on (session_id, ts) serves it; `install`
+adds it to an existing store. The tool text tells the reader to read `then`
+before relying on a claim.
+
+No edges for this: "next turn" is already in the episodes (session and time),
+and a stored copy of an order can drift from it. Edges come when they record
+what the episodes do not: a subagent's turns to the turn that spawned them, a
+Codex fork to its origin, and, for the cross-session revision (one of four),
+an asserted `revises` edge carrying who asserted it. Inferred contradiction
+edges wait for an evaluation; the fourteen judgements are its seed.
