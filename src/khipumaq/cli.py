@@ -18,6 +18,9 @@ def main(argv=None):
     ingest = sub.add_parser("ingest", help="ingest sessions (see `khipumaq ingest -h`)", add_help=False)
     ingest.add_argument("rest", nargs=argparse.REMAINDER)
     sub.add_parser("describe", help="print what the store holds")
+    claude_ai = sub.add_parser("import-claude-ai", help="add a claude.ai export's conversations.json; never replaces what is stored")
+    claude_ai.add_argument("path", type=Path, help="the export's conversations.json")
+    claude_ai.add_argument("--dry-run", action="store_true", help="count what would be added without writing")
     sweep = sub.add_parser("sweep", help="ingest this machine's sessions changed since the last sweep")
     sweep.add_argument("--all", action="store_true", help="ignore the last sweep; ingest every session file")
     install = sub.add_parser("install", help="wire hooks and the MCP server on this machine")
@@ -35,6 +38,8 @@ def main(argv=None):
         from khipumaq.ingest import main as ingest_main
 
         return ingest_main(args.rest)
+    if args.command == "import-claude-ai":
+        return _import_claude_ai(args.path, args.dry_run)
     if args.command == "describe":
         from khipumaq.db import get_database
         from khipumaq.describe import describe
@@ -50,6 +55,19 @@ def main(argv=None):
     if args.command == "install":
         return _install(skip_codex=args.no_codex)
     return _uninstall()
+
+
+def _import_claude_ai(path, dry_run):
+    from khipumaq.claude_ai_export import HOST, LABEL, ingest_claude_ai
+    from khipumaq.db import get_database
+    from khipumaq.observability import emit_ingest_event
+
+    result = ingest_claude_ai(get_database(), path, dry_run=dry_run)
+    if not dry_run:
+        emit_ingest_event(kind="import-claude-ai", label=LABEL, host=HOST,
+                          count=result["episodes"]["new"], source_file=path)
+    print(json.dumps(result, indent=2))
+    return 0
 
 
 SWEEP_STATE = Path.home() / ".local" / "state" / "khipumaq" / "last-sweep"
