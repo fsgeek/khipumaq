@@ -55,7 +55,10 @@ with `tests/test_claude_ai_export.py`; read the tests for style, not the module 
 | message fields | has `recipient`, `status`, `weight`, `end_turn` | none of those four |
 
 Among the 762 shared conversations: every one has a different node count (the old has extra system/tool/hidden nodes);
-of 28,020 shared messages, 25 differ in content, which no one has examined. Their nature is unknown.
+of 28,020 shared messages, 25 differ in `content`. A differential comparison (2026-10-07, before any import) found
+that in every one of the 25 the text is identical in both exports (zero differing string parts); they differ only in the
+`metadata` of attached asset parts (38 parts, on user `multimodal_text` messages, same `create_time`). So "first export
+wins the episode" costs nothing in text; both raw versions are still kept (invariant 6).
 
 Old-export assistant messages by type: 14,442 are `text` to recipient `all` (replies); 467 are `text` to `bio`
 (ChatGPT's saved-memory writes, e.g. "Tony is exploring..."); the rest are tool calls (`python`, `web`, `web.run`) and
@@ -68,15 +71,18 @@ Conversation keys: `id` (equals `conversation_id`), `title`, `create_time`, `upd
 
 ## Rules to test
 
-- **Episode source.** An episode is an assistant message with content type `text`, whose `recipient` is `all` when the
-  field exists (the new export has none), not hidden, and with non-empty text. `thoughts`, `reasoning_recap`, tool
-  calls, `bio` writes and canvas documents make no episode; they are in raw.
+- **Episode source.** An episode is an assistant message with content type `text`, not hidden, with non-empty text, and
+  whose `recipient` is `all` (a reply, `kind: "reply"`) or `bio` (ChatGPT's saved-memory write about the user,
+  `kind: "memory-write"`) when the field exists; the new export has no `recipient`, so every visible assistant `text`
+  there is a reply. Memory writes are episodes on purpose: they are what another party said about the user, and the
+  user does not want that kept from the ayllu (opt-in label still applies). `thoughts`, `reasoning_recap`, tool
+  calls and canvas documents make no episode; they are in raw, stored and not hidden.
 - **Prompt.** The nearest `user` ancestor by `parent`, skipping system/tool/hidden nodes. Its `parts` that are strings
   are the text; dict parts (images, asset pointers) contribute nothing to the text.
 - **Fields on the episode**, as the Claude importer has them where they apply: `_key`, `session_id` (conversation id),
   `ts` (ISO from `create_time`), `model` (`metadata.model_slug` or null), `experiment_label`, `source_file`,
   `user_message`, `user_ts`, `response`, `state: {}`, `state_text: ""`, `activity_log: []`, `host`, `machine_id`,
-  `agent_id`, `conversation_name` (title), `parent_uuid`, `structure`; plus `active_path` (true when the node lies on the
+  `agent_id`, `conversation_name` (title), `parent_uuid`, `structure`; plus `kind` (`reply` or `memory-write`), `active_path` (true when the node lies on the
   path from `current_node` to the root) and `export_id`.
 - **Raw.** One document per node that has a message, plus one for each conversation's metadata (everything but
   `mapping`). `text` is the parsed object re-serialized as JSON; say in a test that it is not the original bytes.
@@ -84,11 +90,13 @@ Conversation keys: `id` (equals `conversation_id`), `title`, `create_time`, `upd
 
 ## What I do not know (please probe, and write a test pinning whatever you find)
 
-1. What the 25 differing messages are, and whether "the first-imported export wins the episode" is the right rule.
+1. (Resolved: see the comparison above. Please confirm it independently from the data, since one reading of mine
+   already had to be corrected.)
 2. Whether `time` values are ever `None` or strings, and what `ts` should be then.
 3. Whether any conversation has a cycle in `parent` links, or a `current_node` that is not in `mapping`.
 4. Whether `multimodal_text` parts can hold user prose in a dict form.
-5. What `user_editable_context` (388 old nodes; custom instructions) should be: raw only is my proposal.
+5. What `user_editable_context` (388 old nodes; custom instructions) should be: raw only is my proposal, and the
+   user's principle (nothing hidden) argues for checking whether it is prose the user wrote.
 6. Whether a huge pasted user message exists here as it does in Claude exports (cap: 20,000 characters, see
    `PASTE_LIMIT` in the Claude importer). I do not know, and do not want a cap added without a measured need.
 
