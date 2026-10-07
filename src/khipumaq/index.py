@@ -2,9 +2,10 @@ EPISODES = "episodes"
 RAW = "raw"  # every source line, verbatim; never in VIEW (A27)
 VIEW = "episodes_search"
 # Labels a search reaches only when it names them: scope "all" leaves them out.
-# The claude.ai chats are the user's gift to the ayllu, and a read cannot be
-# taken back, so whoever wants them has to ask.
-OPT_IN_LABELS = ("claude-ai-chat",)
+# The chat exports (claude.ai, ChatGPT; one label per source) are the user's
+# gift to the ayllu, and a read cannot be taken back, so whoever wants them
+# has to ask. A new chat importer's label goes here before its first import.
+OPT_IN_LABELS = ("claude-ai-chat", "chatgpt-chat")
 # The fix: index conversation (both sides) AND flattened state — not state alone.
 INDEXED_FIELDS = ["user_message", "response", "state_text"]
 ANALYZER = "text_en"  # built-in: tokenize, lowercase, stem, stopwords -> BM25

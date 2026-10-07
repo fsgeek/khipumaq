@@ -108,7 +108,7 @@ def test_opt_in_labels_stay_out_of_all_and_come_back_only_when_named(search_view
     """The claude.ai chats are the ayllu's to opt into: a search that does not
     name their label must not meet them, in hits or in either count."""
     db, col, view = search_view
-    assert "claude-ai-chat" in OPT_IN_LABELS
+    assert {"claude-ai-chat", "chatgpt-chat"} <= set(OPT_IN_LABELS)  # chat exports, one label per source
     chat = next(iter(OPT_IN_LABELS))
     col.insert({"_key": "code", "cycle": 1, "experiment_label": "khipumaq",
                 "user_message": "heliotrope", "response": "cantilever"})
