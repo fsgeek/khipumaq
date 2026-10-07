@@ -63,7 +63,9 @@ def search(
     machine where khipumaq is installed, keyed by project label. Use it before
     asking what happened, what was decided, or what a prior instance answered.
     `scope` restricts to one project label (see `describe`); "all" searches
-    everything. `since`/`until` are ISO dates bounding the episode timestamp;
+    everything except opt-in labels such as "claude-ai-chat" (the user's past
+    claude.ai chats), which a search reaches only by naming them as `scope`.
+    `since`/`until` are ISO dates bounding the episode timestamp;
     a week or a month usually cuts the candidates by an order of magnitude.
     Returns {"total": N, "total_all": M, "hits": [...]}: `total` is how many
     episodes hold any query word, `total_all` how many hold every one. Hits are

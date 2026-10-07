@@ -4,7 +4,7 @@ from uuid import uuid4
 import pytest
 
 from khipumaq.db import get_database
-from khipumaq.index import ANALYZER, EPISODES, INDEXED_FIELDS, ensure_index
+from khipumaq.index import ANALYZER, EPISODES, INDEXED_FIELDS, OPT_IN_LABELS, ensure_index
 from khipumaq.ingest import ingest_file
 from khipumaq.search import search
 
@@ -102,6 +102,30 @@ def test_total_all_obeys_scope_and_inclusive_exclusive_window(
     expected_total = expected_all + (filters.get("scope") != "missing")
     assert result["total"] == expected_total
     assert len(result["hits"]) == expected_total
+
+
+def test_opt_in_labels_stay_out_of_all_and_come_back_only_when_named(search_view):
+    """The claude.ai chats are the ayllu's to opt into: a search that does not
+    name their label must not meet them, in hits or in either count."""
+    db, col, view = search_view
+    assert "claude-ai-chat" in OPT_IN_LABELS
+    chat = next(iter(OPT_IN_LABELS))
+    col.insert({"_key": "code", "cycle": 1, "experiment_label": "khipumaq",
+                "user_message": "heliotrope", "response": "cantilever"})
+    col.insert({"_key": "chat", "cycle": 2, "experiment_label": chat,
+                "user_message": "heliotrope", "response": "cantilever"})
+    col.insert({"_key": "unlabelled", "cycle": 3, "user_message": "heliotrope", "response": "cantilever"})
+
+    everything = search(db, "heliotrope cantilever", view=view)
+    assert {h["key"] for h in everything["hits"]} == {"code", "unlabelled"}
+    assert (everything["total"], everything["total_all"]) == (2, 2)
+
+    named = search(db, "heliotrope cantilever", scope=chat, view=view)
+    assert {h["key"] for h in named["hits"]} == {"chat"}
+    assert (named["total"], named["total_all"]) == (1, 1)
+
+    other = search(db, "heliotrope cantilever", scope="khipumaq", view=view)
+    assert {h["key"] for h in other["hits"]} == {"code"}
 
 
 @pytest.mark.parametrize("query", ["", "--- !!!"])

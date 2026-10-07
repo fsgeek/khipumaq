@@ -15,7 +15,7 @@ from khipumaq.index import EPISODES, RAW
 from khipumaq.ingest import _turn_text
 
 HOST = "claude.ai"
-LABEL = "claude-ai"
+LABEL = "claude-ai-chat"
 _CHUNK = 1000
 PASTE_LIMIT = 20_000  # characters of one paste kept in an episode (median paste ~7.7k)
 

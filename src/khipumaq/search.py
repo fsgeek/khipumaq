@@ -1,4 +1,4 @@
-from khipumaq.index import ANALYZER, VIEW
+from khipumaq.index import ANALYZER, OPT_IN_LABELS, VIEW
 
 _AQL = """
 FOR doc IN @@view
@@ -64,8 +64,10 @@ def search(db, query, scope="all", limit=10, view=VIEW, since=None, until=None):
     conversation-inclusive view (user_message + response + state_text); `view`
     can target another (e.g. a state-only view for controlled comparison).
     `scope` partitions by `experiment_label`: the default "all" searches every
-    corpus, any other value restricts results to episodes with that label (e.g.
-    "claude_code" so a live-session query cannot surface taste_open episodes).
+    corpus except the opt-in labels (`OPT_IN_LABELS`), any other value restricts
+    results to episodes with that label (e.g. "claude_code" so a live-session
+    query cannot surface taste_open episodes), and naming an opt-in label is
+    how to reach it.
     `since`/`until` bound the episode timestamp (ISO date or datetime strings,
     inclusive/exclusive). Returns {"total": N, "hits": [...]}: `total` is how
     many episodes matched before LIMIT, so a caller can see it is looking at
@@ -100,7 +102,10 @@ def search(db, query, scope="all", limit=10, view=VIEW, since=None, until=None):
 
 def _with_filters(aql, bind_vars, scope, since, until):
     filters = {
-        "__SCOPE_FILTER__": ("FILTER doc.experiment_label == @scope", "scope", None if scope == "all" else scope),
+        "__SCOPE_FILTER__": (
+            ("FILTER doc.experiment_label NOT IN @opt_in", "opt_in", list(OPT_IN_LABELS))
+            if scope == "all" else ("FILTER doc.experiment_label == @scope", "scope", scope)
+        ),
         "__SINCE_FILTER__": ("FILTER doc.ts >= @since", "since", since),
         "__UNTIL_FILTER__": ("FILTER doc.ts < @until", "until", until),
     }
