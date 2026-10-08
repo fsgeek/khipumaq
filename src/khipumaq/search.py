@@ -105,7 +105,11 @@ def search(db, query, scope="all", limit=10, view=VIEW, since=None, until=None):
 
 def _with_filters(aql, bind_vars, scope, since, until):
     filters = {
-        "__SCOPE_FILTER__": ("FILTER doc.experiment_label == @scope", "scope", None if scope == "all" else scope),
+        # Opt-in labels live in their own view; the NOT IN is a second layer for one misfiled in this one.
+        "__SCOPE_FILTER__": (
+            ("FILTER doc.experiment_label NOT IN @opt_in", "opt_in", list(OPT_IN_LABELS))
+            if scope == "all" else ("FILTER doc.experiment_label == @scope", "scope", scope)
+        ),
         "__SINCE_FILTER__": ("FILTER doc.ts >= @since", "since", since),
         "__UNTIL_FILTER__": ("FILTER doc.ts < @until", "until", until),
     }

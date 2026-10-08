@@ -141,6 +141,26 @@ def test_opt_in_labels_live_apart_so_no_default_search_can_reach_them(isolated_d
         chat.delete(f"chat-{marker}", ignore_missing=True)
 
 
+def test_an_opt_in_label_misfiled_in_the_default_store_is_still_left_out_of_all(isolated_database):
+    """Second layer: if some importer writes an opt-in label into the default
+    collection by mistake, scope "all" still does not return it."""
+    db, _ = isolated_database
+    ensure_index(db)
+    marker = f"misfiledmarker{uuid4().hex}"
+    col = db.collection(index.EPISODES)
+    col.insert({"_key": f"ok-{marker}", "cycle": 1, "experiment_label": "khipumaq", "ts": "2026-10-01T00:00:00Z",
+                "user_message": marker, "response": "cantilever"})
+    col.insert({"_key": f"misfiled-{marker}", "cycle": 2, "experiment_label": "chatgpt-chat", "ts": "2026-10-01T00:00:00Z",
+                "user_message": marker, "response": "cantilever"})
+    try:
+        result = search(db, f"{marker} cantilever")
+        assert {h["key"] for h in result["hits"]} == {f"ok-{marker}"}
+        assert (result["total"], result["total_all"]) == (1, 1)
+    finally:
+        col.delete(f"ok-{marker}", ignore_missing=True)
+        col.delete(f"misfiled-{marker}", ignore_missing=True)
+
+
 @pytest.mark.parametrize("query", ["", "--- !!!"])
 def test_total_all_is_zero_when_analyzer_drops_every_token(search_view, query):
     db, col, view = search_view
