@@ -1,4 +1,4 @@
-from khipumaq.index import EPISODES
+from khipumaq.index import CHAT, EPISODES
 
 THEN = 3  # later turns shown with a recalled episode
 
@@ -26,8 +26,13 @@ def recall(db, key):
     old episodes instances opened, four had been revised before they were
     opened, three of them later in the same session ("I stand corrected",
     "withdrawn"), and nothing in the revised episode said so."""
-    episode = db.collection(EPISODES).get(key)
+    for collection in (EPISODES, CHAT):  # the opt-in store holds keys only a named search returns
+        if collection == CHAT and not db.has_collection(CHAT):
+            return None
+        episode = db.collection(collection).get(key)
+        if episode is not None:
+            break
     if episode is not None and episode.get("session_id") and episode.get("ts"):
         episode["then"] = next(db.aql.execute(_THEN, bind_vars={
-            "@col": EPISODES, "session": episode["session_id"], "ts": episode["ts"], "n": THEN}))
+            "@col": collection, "session": episode["session_id"], "ts": episode["ts"], "n": THEN}))
     return episode

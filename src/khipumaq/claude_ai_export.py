@@ -11,7 +11,7 @@ import json
 
 from arango.exceptions import CollectionCreateError
 
-from khipumaq.index import EPISODES, RAW
+from khipumaq.index import CHAT, RAW, ensure_chat_index
 from khipumaq.ingest import _turn_text
 
 HOST = "claude.ai"
@@ -181,8 +181,10 @@ def ingest_claude_ai(db, path, dry_run=False, exclude=frozenset()):
             continue
         episodes.extend(claude_ai_episodes(conversation))
         raws.extend(claude_ai_raw_documents(conversation))
+    if not dry_run:
+        ensure_chat_index(db)
     return {
-        "episodes": _add_new(db, EPISODES, episodes, dry_run),
+        "episodes": _add_new(db, CHAT, episodes, dry_run),
         "raw": _add_new(db, RAW, raws, dry_run),
         "excluded": excluded,
     }

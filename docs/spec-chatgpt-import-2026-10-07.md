@@ -15,8 +15,11 @@ with `tests/test_claude_ai_export.py`; read the tests for style, not the module 
 1. **Additive only.** No record already stored is replaced or altered by an import: not an episode, not a raw
    document, not anything else. A document whose key exists is left exactly as it is, including `_rev`.
 2. **Idempotent.** A second run of the same inputs adds nothing and reports `new: 0`.
-3. **Opt-in label.** Every episode has `experiment_label == "chatgpt-chat"`, which is already in
-   `khipumaq.index.OPT_IN_LABELS`, so `search(scope="all")` never returns it and `scope="chatgpt-chat"` does.
+3. **Opt-in, structurally.** Every episode has `experiment_label == "chatgpt-chat"` (already in
+   `khipumaq.index.OPT_IN_LABELS`) and is stored in `index.CHAT`, never in `index.EPISODES`, so the default view
+   (`index.VIEW`) cannot contain it: `search(scope="all")`, and a client running older code with no filter at all, never
+   return it, and `search(scope="chatgpt-chat")` does (it routes to `index.CHAT_VIEW`). The importer calls
+   `ensure_chat_index(db)` before writing. A test must show the default store is byte-identical before and after.
 4. **Namespaced keys.** Episode `_key` starts with `chatgpt-` so it cannot meet a Code-session key or a `claude-ai-` one.
 5. **Every branch.** ChatGPT's `mapping` is a tree (`parent` per node, `current_node` per conversation). Every node is
    imported, including nodes off the active path. An earlier importer elsewhere collapsed regenerations into one line
@@ -38,7 +41,7 @@ with `tests/test_claude_ai_export.py`; read the tests for style, not the module 
   two calls with two ids. `PATH` is a `conversations.json` or the `conversations-NNN.json` shards of one export.
 - Result: `{"episodes": {"new", "existing"}, "raw": {"new", "existing"}, "conflicts": N}`.
 - Raw keys include the export id, so one message in two exports is two raw documents; episode keys do not, so it is one
-  episode (invariant 6).
+  episode (invariant 6). Episodes go to `index.CHAT`, as the Claude importer's do (see `tests/test_claude_ai_export.py`).
 
 ## What the two exports are (measured 2026-10-05, read-only)
 

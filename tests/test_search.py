@@ -4,7 +4,8 @@ from uuid import uuid4
 import pytest
 
 from khipumaq.db import get_database
-from khipumaq.index import ANALYZER, EPISODES, INDEXED_FIELDS, OPT_IN_LABELS, ensure_index
+from khipumaq import index
+from khipumaq.index import ANALYZER, EPISODES, INDEXED_FIELDS, OPT_IN_LABELS, ensure_chat_index, ensure_index
 from khipumaq.ingest import ingest_file
 from khipumaq.search import search
 
@@ -104,28 +105,40 @@ def test_total_all_obeys_scope_and_inclusive_exclusive_window(
     assert len(result["hits"]) == expected_total
 
 
-def test_opt_in_labels_stay_out_of_all_and_come_back_only_when_named(search_view):
-    """The claude.ai chats are the ayllu's to opt into: a search that does not
-    name their label must not meet them, in hits or in either count."""
-    db, col, view = search_view
+def test_opt_in_labels_live_apart_so_no_default_search_can_reach_them(isolated_database):
+    """The chats are the ayllu's to opt into. They are in their own collection and
+    view, so even a client with older code, which knows only the default view and
+    has no filter for them, cannot return them under scope "all"."""
+    db, _ = isolated_database
+    ensure_index(db)
+    ensure_chat_index(db)
     assert {"claude-ai-chat", "chatgpt-chat"} <= set(OPT_IN_LABELS)  # chat exports, one label per source
-    chat = next(iter(OPT_IN_LABELS))
-    col.insert({"_key": "code", "cycle": 1, "experiment_label": "khipumaq",
-                "user_message": "heliotrope", "response": "cantilever"})
-    col.insert({"_key": "chat", "cycle": 2, "experiment_label": chat,
-                "user_message": "heliotrope", "response": "cantilever"})
-    col.insert({"_key": "unlabelled", "cycle": 3, "user_message": "heliotrope", "response": "cantilever"})
+    chat_label = "claude-ai-chat"
+    marker = f"optinmarker{uuid4().hex}"
+    code = db.collection(index.EPISODES)
+    chat = db.collection(index.CHAT)
+    code.insert({"_key": f"code-{marker}", "cycle": 1, "experiment_label": "khipumaq", "ts": "2026-10-01T00:00:00Z",
+                 "user_message": marker, "response": "cantilever"})
+    chat.insert({"_key": f"chat-{marker}", "cycle": 2, "experiment_label": chat_label, "ts": "2026-10-01T00:00:00Z",
+                 "user_message": marker, "response": "cantilever"})
+    try:
+        everything = search(db, f"{marker} cantilever")
+        assert {h["key"] for h in everything["hits"]} == {f"code-{marker}"}
+        assert (everything["total"], everything["total_all"]) == (1, 1)
 
-    everything = search(db, "heliotrope cantilever", view=view)
-    assert {h["key"] for h in everything["hits"]} == {"code", "unlabelled"}
-    assert (everything["total"], everything["total_all"]) == (2, 2)
+        # What an older client does: the default view, no opt-in filter, scope "all".
+        old_client = search(db, f"{marker} cantilever", scope="all", view=index.VIEW)
+        assert f"chat-{marker}" not in {h["key"] for h in old_client["hits"]}
 
-    named = search(db, "heliotrope cantilever", scope=chat, view=view)
-    assert {h["key"] for h in named["hits"]} == {"chat"}
-    assert (named["total"], named["total_all"]) == (1, 1)
+        named = search(db, f"{marker} cantilever", scope=chat_label)
+        assert {h["key"] for h in named["hits"]} == {f"chat-{marker}"}
+        assert (named["total"], named["total_all"]) == (1, 1)
 
-    other = search(db, "heliotrope cantilever", scope="khipumaq", view=view)
-    assert {h["key"] for h in other["hits"]} == {"code"}
+        other = search(db, f"{marker} cantilever", scope="khipumaq")
+        assert {h["key"] for h in other["hits"]} == {f"code-{marker}"}
+    finally:
+        code.delete(f"code-{marker}", ignore_missing=True)
+        chat.delete(f"chat-{marker}", ignore_missing=True)
 
 
 @pytest.mark.parametrize("query", ["", "--- !!!"])

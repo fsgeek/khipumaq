@@ -39,11 +39,13 @@ from khipumaq import index
 
 _TEST_NAMES = {
     name: f"test_suite_{uuid4().hex}_{name}"
-    for name in ("episodes", "episodes_search", "raw", "queries")
+    for name in ("episodes", "episodes_search", "raw", "queries", "episodes_chat", "episodes_chat_search")
 }
 index.EPISODES = _TEST_NAMES["episodes"]
 index.VIEW = _TEST_NAMES["episodes_search"]
 index.RAW = _TEST_NAMES["raw"]
+index.CHAT = _TEST_NAMES["episodes_chat"]
+index.CHAT_VIEW = _TEST_NAMES["episodes_chat_search"]
 
 
 @contextmanager
@@ -67,7 +69,7 @@ def _isolated_database():
 
     def execute_isolated(self, query, *args, **kwargs):
         query = re.sub(
-            r"\b(IN|INTO)\s+(episodes|queries|raw|episodes_search)\b",
+            r"\b(IN|INTO)\s+(episodes_chat_search|episodes_chat|episodes_search|episodes|queries|raw)\b",
             lambda m: f"{m[1]} {_TEST_NAMES[m[2]]}", query,
         )
         if "bind_vars" in kwargs and kwargs["bind_vars"] is not None:
@@ -94,8 +96,9 @@ def _isolated_database():
         finally:
             try:
                 db.delete_view(index.VIEW, ignore_missing=True)
+                db.delete_view(index.CHAT_VIEW, ignore_missing=True)
             finally:
-                for name in ("episodes", "raw", "queries"):
+                for name in ("episodes", "raw", "queries", "episodes_chat"):
                     db.delete_collection(_TEST_NAMES[name], ignore_missing=True)
 
 

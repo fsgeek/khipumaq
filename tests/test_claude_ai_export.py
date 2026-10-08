@@ -12,7 +12,7 @@ from khipumaq.claude_ai_export import (
     ingest_claude_ai,
 )
 from khipumaq.db import get_database
-from khipumaq.index import ensure_index
+from khipumaq.index import ensure_chat_index, ensure_index
 
 NULL_PARENT = "00000000-0000-4000-8000-000000000000"
 
@@ -53,7 +53,13 @@ def forked_conversation():
 
 
 def episodes_by_key(db):
+    """The default store, which an import must never touch."""
     return {d["_key"]: d for d in db.collection(index.EPISODES).all()}
+
+
+def chat_by_key(db):
+    """The opt-in store, where chat episodes go."""
+    return {d["_key"]: d for d in db.collection(index.CHAT).all()} if db.has_collection(index.CHAT) else {}
 
 
 def test_each_reply_in_a_fork_pairs_with_its_own_parent_not_the_preceding_message():
@@ -168,20 +174,20 @@ def test_keys_are_namespaced_so_they_cannot_collide_with_code_session_keys():
 
 def test_existing_documents_are_never_overwritten(tmp_path):
     db = get_database()
-    ensure_index(db)
+    ensure_chat_index(db)
     c, (h1, a1, *_rest) = forked_conversation()
     path = write_export(tmp_path, [c])
     key = next(e["_key"] for e in claude_ai_episodes(c) if e["response"] == a1["text"])
     sentinel = {"_key": key, "response": "PRE-EXISTING, DO NOT TOUCH", "user_message": "x",
                 "experiment_label": "someone-else"}
-    db.collection(index.EPISODES).insert(sentinel)
+    db.collection(index.CHAT).insert(sentinel)
     raw_key = next(r["_key"] for r in claude_ai_raw_documents(c) if r["kind"] == "claude_ai")
     db.create_collection(index.RAW) if not db.has_collection(index.RAW) else None
     db.collection(index.RAW).insert({"_key": raw_key, "text": "PRE-EXISTING RAW"})
 
     result = ingest_claude_ai(db, path)
 
-    assert db.collection(index.EPISODES).get(key)["response"] == "PRE-EXISTING, DO NOT TOUCH"
+    assert db.collection(index.CHAT).get(key)["response"] == "PRE-EXISTING, DO NOT TOUCH"
     assert db.collection(index.RAW).get(raw_key)["text"] == "PRE-EXISTING RAW"
     assert result["episodes"] == {"new": 2, "existing": 1}
 
@@ -192,32 +198,36 @@ def test_unrelated_existing_episodes_are_untouched_and_rerun_adds_nothing(tmp_pa
     bystander = {"_key": f"bystander-{uuid4()}", "response": "mine", "user_message": "q",
                  "experiment_label": "wamason-com", "ts": "2026-01-01T00:00:00Z"}
     db.collection(index.EPISODES).insert(bystander)
+    default_before = episodes_by_key(db)
+    chat_before = chat_by_key(db)
     path = write_export(tmp_path, [forked_conversation()[0]])
 
     first = ingest_claude_ai(db, path)
     assert first["episodes"] == {"new": 3, "existing": 0}
-    snapshot = episodes_by_key(db)
+    assert episodes_by_key(db) == default_before  # the default store is not touched at all
+    snapshot = chat_by_key(db)
+    assert len(snapshot) == len(chat_before) + 3
+    assert all(snapshot[k] == v for k, v in chat_before.items())
     raw_snapshot = {d["_key"]: d for d in db.collection(index.RAW).all()}
 
     second = ingest_claude_ai(db, path)
 
     assert second["episodes"] == {"new": 0, "existing": 3}
     assert second["raw"]["new"] == 0
-    assert episodes_by_key(db) == snapshot
+    assert chat_by_key(db) == snapshot
     assert {d["_key"]: d for d in db.collection(index.RAW).all()} == raw_snapshot
-    assert snapshot[bystander["_key"]] == db.collection(index.EPISODES).get(bystander["_key"])
-    assert snapshot[bystander["_key"]]["response"] == "mine"
+    assert db.collection(index.EPISODES).get(bystander["_key"])["response"] == "mine"
 
 
 def test_dry_run_reports_counts_and_writes_nothing(tmp_path):
     db = get_database()
-    ensure_index(db)
-    before = episodes_by_key(db)
+    ensure_chat_index(db)
+    before = chat_by_key(db)
     raw_before = db.collection(index.RAW).count() if db.has_collection(index.RAW) else 0
     result = ingest_claude_ai(db, write_export(tmp_path, [forked_conversation()[0]]), dry_run=True)
     assert result["episodes"] == {"new": 3, "existing": 0}
     assert result["raw"]["new"] == 5 + 1
-    assert episodes_by_key(db) == before
+    assert chat_by_key(db) == before
     assert (db.collection(index.RAW).count() if db.has_collection(index.RAW) else 0) == raw_before
 
 
@@ -225,19 +235,19 @@ def test_cli_dry_run_prints_counts_and_a_real_run_then_a_rerun_adds_nothing(tmp_
     from khipumaq.cli import main
 
     path = write_export(tmp_path, [forked_conversation()[0]])
-    before = episodes_by_key(get_database())
+    before = chat_by_key(get_database())
 
     assert main(["import-claude-ai", str(path), "--dry-run"]) == 0
     assert json.loads(capsys.readouterr().out)["episodes"] == {"new": 3, "existing": 0}
-    assert episodes_by_key(get_database()) == before
+    assert chat_by_key(get_database()) == before
 
     assert main(["import-claude-ai", str(path)]) == 0
     assert json.loads(capsys.readouterr().out)["episodes"] == {"new": 3, "existing": 0}
-    assert len(episodes_by_key(get_database())) == len(before) + 3
+    assert len(chat_by_key(get_database())) == len(before) + 3
 
     assert main(["import-claude-ai", str(path)]) == 0
     assert json.loads(capsys.readouterr().out)["episodes"] == {"new": 0, "existing": 3}
-    assert len(episodes_by_key(get_database())) == len(before) + 3
+    assert len(chat_by_key(get_database())) == len(before) + 3
 
 
 def test_excluded_conversations_are_left_out_entirely_and_the_result_says_so(tmp_path, capsys):
@@ -249,8 +259,8 @@ def test_excluded_conversations_are_left_out_entirely_and_the_result_says_so(tmp
     exclude = tmp_path / "exclude.txt"
     exclude.write_text(f"# client work, declared on the plaza\n{left_out['uuid']}\n\n")
     db = get_database()
-    ensure_index(db)
-    before = len(episodes_by_key(db))
+    ensure_chat_index(db)
+    before = len(chat_by_key(db))
 
     assert main(["import-claude-ai", str(path), "--exclude-file", str(exclude), "--dry-run"]) == 0
     dry = json.loads(capsys.readouterr().out)
@@ -260,9 +270,24 @@ def test_excluded_conversations_are_left_out_entirely_and_the_result_says_so(tmp
     assert dry == real
     assert real["excluded"] == 1
     assert real["episodes"] == {"new": 3, "existing": 0}  # one conversation, not two
-    stored = episodes_by_key(db)
+    stored = chat_by_key(db)
     assert len(stored) == before + 3
     sessions = {e.get("session_id") for e in stored.values()}
     assert kept["uuid"] in sessions and left_out["uuid"] not in sessions
     raws = {d["source_file"] for d in db.collection(index.RAW).all() if d.get("kind", "").startswith("claude_ai")}
     assert f"claude.ai/{left_out['uuid']}" not in raws and f"claude.ai/{kept['uuid']}" in raws
+
+
+def test_recall_by_key_finds_a_chat_episode_and_shows_what_the_session_said_next(tmp_path):
+    from khipumaq.recall import recall
+
+    db = get_database()
+    c, (h1, a1, a2, h2, a3) = forked_conversation()
+    ingest_claude_ai(db, write_export(tmp_path, [c]))
+
+    episode = recall(db, f"claude-ai-{a1['uuid']}")
+
+    assert episode["response"] == "Rayleigh scattering."
+    assert episode["session_id"] == c["uuid"]
+    assert [t["key"] for t in episode["then"]["turns"]] == [f"claude-ai-{a2['uuid']}", f"claude-ai-{a3['uuid']}"]
+    assert recall(db, f"claude-ai-{uuid4()}") is None  # absent in both stores
