@@ -166,17 +166,23 @@ def _add_new(db, name, docs, dry_run):
     return {"new": len(new), "existing": len(present)}
 
 
-def ingest_claude_ai(db, path, dry_run=False):
+def ingest_claude_ai(db, path, dry_run=False, exclude=frozenset()):
     """Add every conversation in a claude.ai export that is not already stored.
-    Returns {"episodes": {"new", "existing"}, "raw": {"new", "existing"}}.
-    When dry_run, counts without writing."""
+    Conversations whose uuid is in `exclude` are not stored at all, and the
+    result counts them, so a left-out conversation is declared, never silent.
+    Returns {"episodes": {"new", "existing"}, "raw": {"new", "existing"},
+    "excluded": N}. When dry_run, counts without writing."""
     with open(path, encoding="utf-8") as f:
         conversations = json.load(f)
-    episodes, raws = [], []
+    episodes, raws, excluded = [], [], 0
     for conversation in conversations:
+        if conversation["uuid"] in exclude:
+            excluded += 1
+            continue
         episodes.extend(claude_ai_episodes(conversation))
         raws.extend(claude_ai_raw_documents(conversation))
     return {
         "episodes": _add_new(db, EPISODES, episodes, dry_run),
         "raw": _add_new(db, RAW, raws, dry_run),
+        "excluded": excluded,
     }

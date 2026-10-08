@@ -238,3 +238,31 @@ def test_cli_dry_run_prints_counts_and_a_real_run_then_a_rerun_adds_nothing(tmp_
     assert main(["import-claude-ai", str(path)]) == 0
     assert json.loads(capsys.readouterr().out)["episodes"] == {"new": 0, "existing": 3}
     assert len(episodes_by_key(get_database())) == len(before) + 3
+
+
+def test_excluded_conversations_are_left_out_entirely_and_the_result_says_so(tmp_path, capsys):
+    from khipumaq.cli import main
+
+    kept, _ = forked_conversation()
+    left_out, _ = forked_conversation()
+    path = write_export(tmp_path, [kept, left_out])
+    exclude = tmp_path / "exclude.txt"
+    exclude.write_text(f"# client work, declared on the plaza\n{left_out['uuid']}\n\n")
+    db = get_database()
+    ensure_index(db)
+    before = len(episodes_by_key(db))
+
+    assert main(["import-claude-ai", str(path), "--exclude-file", str(exclude), "--dry-run"]) == 0
+    dry = json.loads(capsys.readouterr().out)
+    assert main(["import-claude-ai", str(path), "--exclude-file", str(exclude)]) == 0
+    real = json.loads(capsys.readouterr().out)
+
+    assert dry == real
+    assert real["excluded"] == 1
+    assert real["episodes"] == {"new": 3, "existing": 0}  # one conversation, not two
+    stored = episodes_by_key(db)
+    assert len(stored) == before + 3
+    sessions = {e.get("session_id") for e in stored.values()}
+    assert kept["uuid"] in sessions and left_out["uuid"] not in sessions
+    raws = {d["source_file"] for d in db.collection(index.RAW).all() if d.get("kind", "").startswith("claude_ai")}
+    assert f"claude.ai/{left_out['uuid']}" not in raws and f"claude.ai/{kept['uuid']}" in raws

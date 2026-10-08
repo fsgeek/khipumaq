@@ -21,6 +21,7 @@ def main(argv=None):
     claude_ai = sub.add_parser("import-claude-ai", help="add a claude.ai export's conversations.json; never replaces what is stored")
     claude_ai.add_argument("path", type=Path, help="the export's conversations.json")
     claude_ai.add_argument("--dry-run", action="store_true", help="count what would be added without writing")
+    claude_ai.add_argument("--exclude-file", type=Path, help="conversation uuids to leave out, one per line (# comments allowed)")
     sweep = sub.add_parser("sweep", help="ingest this machine's sessions changed since the last sweep")
     sweep.add_argument("--all", action="store_true", help="ignore the last sweep; ingest every session file")
     install = sub.add_parser("install", help="wire hooks and the MCP server on this machine")
@@ -39,7 +40,7 @@ def main(argv=None):
 
         return ingest_main(args.rest)
     if args.command == "import-claude-ai":
-        return _import_claude_ai(args.path, args.dry_run)
+        return _import_claude_ai(args.path, args.dry_run, args.exclude_file)
     if args.command == "describe":
         from khipumaq.db import get_database
         from khipumaq.describe import describe
@@ -57,12 +58,16 @@ def main(argv=None):
     return _uninstall()
 
 
-def _import_claude_ai(path, dry_run):
+def _import_claude_ai(path, dry_run, exclude_file=None):
     from khipumaq.claude_ai_export import HOST, LABEL, ingest_claude_ai
     from khipumaq.db import get_database
     from khipumaq.observability import emit_ingest_event
 
-    result = ingest_claude_ai(get_database(), path, dry_run=dry_run)
+    exclude = set()
+    if exclude_file is not None:
+        lines = (line.split("#")[0].strip() for line in exclude_file.read_text().splitlines())
+        exclude = {line for line in lines if line}
+    result = ingest_claude_ai(get_database(), path, dry_run=dry_run, exclude=exclude)
     if not dry_run:
         emit_ingest_event(kind="import-claude-ai", label=LABEL, host=HOST,
                           count=result["episodes"]["new"], source_file=path)

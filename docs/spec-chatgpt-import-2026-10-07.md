@@ -69,6 +69,13 @@ Conversation keys: `id` (equals `conversation_id`), `title`, `create_time`, `upd
 `parent`, `message` (null for each conversation's root; the old export's node keys were not inspected). Message keys: `id`, `author`
 (`role`), `content` (`content_type`, `parts` or `text`), `create_time`, `metadata` (`model_slug`, `parent_id`, ...).
 
+## Exclusion list
+
+The CLI takes `--exclude-file PATH` (conversation ids, one per line, `#` comments allowed), as the Claude importer does.
+An excluded conversation is not stored at all (no episode, no raw), and the result reports `excluded: N`, so a
+conversation left out is declared and never silent. Tests: excluded ids absent from both collections; others present;
+dry run and real run report the same; the count is in the result.
+
 ## Rules to test
 
 - **Episode source.** An episode is an assistant message with content type `text`, not hidden, with non-empty text, and
