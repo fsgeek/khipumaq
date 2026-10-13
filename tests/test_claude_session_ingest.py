@@ -907,3 +907,19 @@ def test_read_machine_id_reads_and_strips_given_path(tmp_path):
     machine_id_path.write_text("  machine-id-with-whitespace  \n", encoding="utf-8")
 
     assert read_machine_id(machine_id_path) == "machine-id-with-whitespace"
+
+
+def test_main_hook_mode_without_transcript_is_not_a_failure(tmp_path, monkeypatch, capsys):
+    # Claude Code writes the transcript lazily: a session that ends before
+    # its first message still fires SessionEnd with a path that never existed.
+    path = tmp_path / "-home-tony-projects-qhaway" / f"{uuid4()}.jsonl"
+    monkeypatch.setattr(
+        sys, "stdin", io.StringIO(json.dumps({"transcript_path": str(path)}))
+    )
+
+    assert main(["claude-session"]) == 0
+    assert capsys.readouterr().err == ""
+
+
+def test_main_explicit_missing_path_is_an_error(tmp_path):
+    assert main(["claude-session", str(tmp_path / "missing.jsonl")]) == 2
