@@ -77,6 +77,8 @@ def search(db, query, scope="all", limit=10, view=VIEW, since=None, until=None):
     query word (A26)."""
     if scope in OPT_IN_LABELS and view == VIEW:
         view = CHAT_VIEW
+        if view not in [v["name"] for v in db.views()]:  # a store that never imported chats
+            return {"total": 0, "total_all": 0, "hits": []}
     bind_vars = {"@view": view, "q": query, "analyzer": ANALYZER, "limit": limit}
     aql = _with_filters(_AQL, bind_vars, scope, since, until)
     cursor = db.aql.execute(aql, bind_vars=bind_vars, full_count=True)

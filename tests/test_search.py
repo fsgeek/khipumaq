@@ -161,6 +161,19 @@ def test_an_opt_in_label_misfiled_in_the_default_store_is_still_left_out_of_all(
         col.delete(f"misfiled-{marker}", ignore_missing=True)
 
 
+def test_an_opt_in_scope_on_a_store_that_never_imported_chats_finds_nothing_instead_of_failing(isolated_database):
+    """A fresh install has no chat view. Asking for an opt-in label there is a
+    reasonable question with an empty answer, not an error."""
+    db, _ = isolated_database
+    ensure_chat_index(db)
+    db.delete_view(index.CHAT_VIEW)
+    try:
+        for scope in OPT_IN_LABELS:
+            assert search(db, "anything at all", scope=scope) == {"total": 0, "total_all": 0, "hits": []}
+    finally:
+        ensure_chat_index(db)
+
+
 @pytest.mark.parametrize("query", ["", "--- !!!"])
 def test_total_all_is_zero_when_analyzer_drops_every_token(search_view, query):
     db, col, view = search_view
