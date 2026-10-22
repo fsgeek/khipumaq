@@ -546,6 +546,10 @@ def main(argv=None):
     else:
         hook = json.load(sys.stdin)
         path = Path(hook["transcript_path"])
+        # Claude Code writes the transcript lazily; a session that ends
+        # before its first message has nothing to ingest.
+        if not path.exists():
+            return 0
     if not path.is_file():
         print(f"claude-session: transcript not found: {path}", file=sys.stderr)
         return 2
