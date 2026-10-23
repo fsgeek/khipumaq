@@ -294,6 +294,20 @@ def ingest_raw(db, path, kind, dry_run=False, host=None, machine_id=None, canoni
     return len(docs)
 
 
+def trim_raw(db, host, source, length):
+    """Remove `raw` lines past a file's current end. Grok and Gemini rewrite
+    some files in place (Grok's chat_history.jsonl at compaction, Gemini's
+    session JSON), and a shorter rewrite would otherwise leave the old
+    version's tail behind."""
+    col = db.collection(RAW)
+    n = length
+    while True:
+        result = col.delete_many([{"_key": raw_key(host, source, i)} for i in range(n, n + 1000)])
+        if not any(isinstance(r, dict) for r in result):
+            return
+        n += 1000
+
+
 def ingest_claude_session(db, path, experiment_label, dry_run=False, host=None, machine_id=None, canonical=str):
     """Load one Claude Code session (project JSONL plus its subagent
     transcripts) into the episodes collection. One episode per prose assistant

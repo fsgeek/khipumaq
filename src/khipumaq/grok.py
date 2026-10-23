@@ -9,8 +9,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import unquote
 
-from khipumaq.index import EPISODES, RAW
-from khipumaq.ingest import ingest_raw, label_from_path, raw_key
+from khipumaq.index import EPISODES
+from khipumaq.ingest import ingest_raw, label_from_path, trim_raw
 
 # File snapshots taken for rewind (about 1 MB a session) and terminal output
 # are large and say little the transcript does not; locks are empty.
@@ -106,19 +106,6 @@ def _session_files(session_dir):
             yield path
 
 
-def _trim_raw(db, host, source, length):
-    """Remove `raw` lines past a file's current end. Grok rewrites some files
-    in place (chat_history.jsonl at compaction, usage.json as it counts), and a
-    shorter rewrite would otherwise leave the old version's tail behind."""
-    col = db.collection(RAW)
-    n = length
-    while True:
-        result = col.delete_many([{"_key": raw_key(host, source, i)} for i in range(n, n + 1000)])
-        if not any(isinstance(r, dict) for r in result):
-            return
-        n += 1000
-
-
 def ingest_grok_session(db, session_dir, dry_run=False, host=None, machine_id=None, canonical=str, label=None):
     """Load one Grok session: its episodes, and every file but the skipped
     ones line by line into `raw` (kind "grok"). Idempotent. Returns the
@@ -129,7 +116,7 @@ def ingest_grok_session(db, session_dir, dry_run=False, host=None, machine_id=No
         length = ingest_raw(db, path, "grok", dry_run=dry_run, host=host, machine_id=machine_id,
                             canonical=canonical, whole=path.suffix != ".jsonl")
         if not dry_run:
-            _trim_raw(db, host, canonical(path), length)
+            trim_raw(db, host, canonical(path), length)
     col = db.collection(EPISODES)
     count = 0
     for episode in grok_session_to_episodes(session_dir, host, machine_id, canonical, label):
