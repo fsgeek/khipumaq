@@ -114,6 +114,12 @@ def _sweep(everything):
     files, count = gemini_sweep(get_database(), gemini_root, since=since, host=host, machine_id=read_machine_id())
     emit_ingest_event(kind="sweep-gemini", label=None, host=host, count=count, source_file=gemini_root)
     print(f"sweep: gemini: {count} episodes from {files} files under {gemini_root}")
+    from khipumaq.antigravity import antigravity_sweep
+
+    agy_root = Path.home() / ".gemini" / "antigravity-cli"
+    conversations, count = antigravity_sweep(get_database(), agy_root, since=since, host=host, machine_id=read_machine_id())
+    emit_ingest_event(kind="sweep-antigravity", label=None, host=host, count=count, source_file=agy_root)
+    print(f"sweep: antigravity: {count} episodes from {conversations} conversations under {agy_root}")
     _sweep_windows(get_database(), since, host)
     SWEEP_STATE.parent.mkdir(parents=True, exist_ok=True)
     SWEEP_STATE.write_text(str(started))
