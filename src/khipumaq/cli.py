@@ -102,6 +102,12 @@ def _sweep(everything):
         files, count = result[kind]
         emit_ingest_event(kind=f"sweep-{kind}", label=None, host=host, count=count, source_file=root)
         print(f"sweep: {kind}: {count} episodes from {files} files under {root}")
+    from khipumaq.grok import grok_sweep
+
+    grok_root = Path.home() / ".grok" / "sessions"
+    sessions, count = grok_sweep(get_database(), grok_root, since=since, host=host, machine_id=read_machine_id())
+    emit_ingest_event(kind="sweep-grok", label=None, host=host, count=count, source_file=grok_root)
+    print(f"sweep: grok: {count} episodes from {sessions} sessions under {grok_root}")
     _sweep_windows(get_database(), since, host)
     SWEEP_STATE.parent.mkdir(parents=True, exist_ok=True)
     SWEEP_STATE.write_text(str(started))

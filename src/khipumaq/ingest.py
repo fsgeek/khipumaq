@@ -240,19 +240,28 @@ def claude_session_files(path):
     return [path] + sorted(subagents.glob("*.jsonl"))
 
 
-def raw_documents(path, kind, host=None, machine_id=None, canonical=str):
+def raw_key(host, source, n):
+    """The `raw` key of line `n` of `source` as read on `host`."""
+    return hashlib.sha256(f"{host}\0{source}\0{n}".encode()).hexdigest()[:32]
+
+
+def raw_documents(path, kind, host=None, machine_id=None, canonical=str, whole=False):
     """Every complete line of a source file, verbatim, one document each
     (A27). Episodes keep the prose; this keeps everything else too: usage,
     tool calls and results, tool-only turns, every Codex event. Split on
     bytes, so the file rebuilds exactly from the lines in order; a last line
-    with no newline is still being written and waits for the next pass. A
-    line that is not UTF-8 is kept as base64, not dropped."""
+    with no newline is still being written and waits for the next pass,
+    unless the file is `whole` (written at once, like a JSON document): then
+    it is kept, marked `newline: False`. A line that is not UTF-8 is kept as
+    base64, not dropped."""
     source = canonical(path)
     parts = Path(path).read_bytes().split(b"\n")
-    parts.pop()  # b"" after a final newline, else the unfinished line
+    last = parts.pop()  # b"" after a final newline, else the unfinished line
+    if whole and last:
+        parts.append(last)
     for n, line in enumerate(parts):
         doc = {
-            "_key": hashlib.sha256(f"{host}\0{source}\0{n}".encode()).hexdigest()[:32],
+            "_key": raw_key(host, source, n),
             "kind": kind,
             "host": host,
             "machine_id": machine_id,
@@ -263,15 +272,17 @@ def raw_documents(path, kind, host=None, machine_id=None, canonical=str):
             doc["text"] = line.decode("utf-8")
         except UnicodeDecodeError:
             doc["b64"] = base64.b64encode(line).decode("ascii")
+        if whole and last and n == len(parts) - 1:
+            doc["newline"] = False
         yield doc
 
 
-def ingest_raw(db, path, kind, dry_run=False, host=None, machine_id=None, canonical=str):
+def ingest_raw(db, path, kind, dry_run=False, host=None, machine_id=None, canonical=str, whole=False):
     """Store `raw_documents` for one file, replacing any earlier copy of the
     same lines (a resumed session re-ingests its whole file). `raw` is not in
     the search view: how a turn was produced is not what was said (A27).
     Returns the line count."""
-    docs = list(raw_documents(path, kind, host=host, machine_id=machine_id, canonical=canonical))
+    docs = list(raw_documents(path, kind, host=host, machine_id=machine_id, canonical=canonical, whole=whole))
     if docs and not dry_run:
         if not db.has_collection(RAW):
             try:
