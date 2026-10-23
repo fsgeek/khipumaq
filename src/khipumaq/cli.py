@@ -22,6 +22,11 @@ def main(argv=None):
     claude_ai.add_argument("path", type=Path, help="the export's conversations.json")
     claude_ai.add_argument("--dry-run", action="store_true", help="count what would be added without writing")
     claude_ai.add_argument("--exclude-file", type=Path, help="conversation uuids to leave out, one per line (# comments allowed)")
+    chatgpt = sub.add_parser("import-chatgpt", help="add one ChatGPT export (conversations.json or its shards); never replaces what is stored")
+    chatgpt.add_argument("paths", type=Path, nargs="+", help="the export's conversations.json, or all of its conversations-NNN.json shards")
+    chatgpt.add_argument("--export-id", required=True, help="names this export; the same message in two exports is kept twice in raw")
+    chatgpt.add_argument("--dry-run", action="store_true", help="count what would be added without writing")
+    chatgpt.add_argument("--exclude-file", type=Path, help="conversation ids to leave out, one per line (# comments allowed)")
     sweep = sub.add_parser("sweep", help="ingest this machine's sessions changed since the last sweep")
     sweep.add_argument("--all", action="store_true", help="ignore the last sweep; ingest every session file")
     install = sub.add_parser("install", help="wire hooks and the MCP server on this machine")
@@ -41,6 +46,8 @@ def main(argv=None):
         return ingest_main(args.rest)
     if args.command == "import-claude-ai":
         return _import_claude_ai(args.path, args.dry_run, args.exclude_file)
+    if args.command == "import-chatgpt":
+        return _import_chatgpt(args.paths, args.export_id, args.dry_run, args.exclude_file)
     if args.command == "describe":
         from khipumaq.db import get_database
         from khipumaq.describe import describe
@@ -56,6 +63,26 @@ def main(argv=None):
     if args.command == "install":
         return _install(skip_codex=args.no_codex)
     return _uninstall()
+
+
+def _exclusions(exclude_file):
+    if exclude_file is None:
+        return set()
+    lines = (line.split("#")[0].strip() for line in exclude_file.read_text().splitlines())
+    return {line for line in lines if line}
+
+
+def _import_chatgpt(paths, export_id, dry_run, exclude_file=None):
+    from khipumaq.chatgpt_export import LABEL, ingest_chatgpt
+    from khipumaq.db import get_database
+    from khipumaq.observability import emit_ingest_event
+
+    result = ingest_chatgpt(get_database(), paths, export_id, dry_run=dry_run, exclude=_exclusions(exclude_file))
+    if not dry_run:
+        emit_ingest_event(kind="import-chatgpt", label=LABEL, host=None,
+                          count=result["episodes"]["new"], source_file=paths[0])
+    print(json.dumps(result, indent=2))
+    return 0
 
 
 def _import_claude_ai(path, dry_run, exclude_file=None):
