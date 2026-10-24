@@ -55,8 +55,8 @@ whether khipumaq's records should live in Apacheta itself. My current view is no
 - khipumaq installs for people who have one ArangoDB and nothing else, and its value is partly
   that it's small enough to finish.
 - In a store with no delete, a secret written once is permanent. A counts-only scan today (for
-  hamut'ay's custodian) found key-shaped strings in `raw`: 5 `sk-ant-`, 13 GitHub tokens and 37
-  private-key blocks. Rotation is already the only real remedy, since the transcripts and two years
+  hamut'ay's custodian) found key-shaped strings in `raw`; the counts are kept privately, not in this
+  public repository. Rotation is already the only real remedy, since the transcripts and two years
   of backups hold the same lines, but an append-only store would need a key-shape filter **before**
   writing. That filter doesn't exist yet.
 
