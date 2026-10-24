@@ -94,6 +94,7 @@ def test_search_records_query_window_counts_ranked_hits_and_context(recorder, to
             "session": "10000000-0000-0000-0000-000000000023",
             "project": "test-project",
             "host": "test-host",
+            "client": None,
             "kind": "search",
             "query": "why did the index change?",
             "scope": "khipumaq",
@@ -199,6 +200,7 @@ def test_recall_links_to_the_search_that_returned_the_key(recorder):
         "session": "10000000-0000-0000-0000-000000000023",
         "project": "test-project",
         "host": "test-host",
+        "client": None,
         "kind": "recall",
         "key": "chosen",
         "found": True,
@@ -275,6 +277,7 @@ def test_describe_records_its_kind_and_context(recorder):
             "session": "10000000-0000-0000-0000-000000000023",
             "project": "test-project",
             "host": "test-host",
+            "client": None,
             "kind": "describe",
         }
     ]
@@ -433,3 +436,27 @@ def test_each_mcp_tool_returns_normally_when_history_collection_insert_raises(
     assert mcp_server.recall("episode") is episode
     assert mcp_server.describe() is description
     assert collection.insert_attempts == 3
+
+
+def test_every_record_names_the_client_that_asked(recorder):
+    # The session uuid is the server's own; only the MCP handshake says which
+    # tool (Claude Code, Codex, Grok, ...) is asking.
+    history, database = recorder
+    history.describe()
+    history.client = {"name": "codex-mcp-client", "version": "0.151.0"}
+    history.describe()
+    first, second = database.collections["queries"].documents
+    assert first["client"] is None
+    assert second["client"] == {"name": "codex-mcp-client", "version": "0.151.0"}
+
+
+def test_client_info_is_read_from_the_handshake_and_absent_is_none():
+    from types import SimpleNamespace
+
+    from khipumaq.mcp_server import _client_info
+
+    info = SimpleNamespace(name="claude-code", version="2.1.0")
+    ctx = SimpleNamespace(session=SimpleNamespace(client_params=SimpleNamespace(clientInfo=info)))
+    assert _client_info(ctx) == {"name": "claude-code", "version": "2.1.0"}
+    assert _client_info(SimpleNamespace(session=SimpleNamespace(client_params=None))) is None
+    assert _client_info(None) is None

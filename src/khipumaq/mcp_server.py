@@ -18,7 +18,7 @@ store is used, kept apart from what it holds.
 Run for dogfooding:  uv run python -m khipumaq.mcp_server   (stdio transport)
 """
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Context, FastMCP
 from mcp.types import ToolAnnotations
 
 from khipumaq.db import get_database, person
@@ -50,6 +50,16 @@ mcp = FastMCP(SERVER_NAME, instructions=_self_description())
 history = QueryHistory(get_database, project=project_label())
 
 
+def _client_info(ctx):
+    """The MCP client's name and version from its handshake (Claude Code,
+    Codex and Grok each send their own), or None if it sent none."""
+    try:
+        info = ctx.session.client_params.clientInfo
+        return {"name": info.name, "version": info.version}
+    except Exception:  # noqa: BLE001 — like the history it feeds, this must not fail the tool
+        return None
+
+
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 def search(
     query: str,
@@ -57,6 +67,7 @@ def search(
     limit: int = 10,
     since: str | None = None,
     until: str | None = None,
+    ctx: Context | None = None,
 ) -> dict:
     """Search every prior session's turns: the user's own words and the
     assistant's full responses, from Claude Code and Codex sessions on every
@@ -74,6 +85,7 @@ def search(
     words never met in one turn, so try fewer. Hits carry `key`, `score`, `ts`,
     `experiment_label`, `source_file`, and a 200-char snippet; pass `key` to
     `recall` for the whole episode."""
+    history.client = _client_info(ctx)
     result, elapsed = timed(_search, get_database(), query, scope=scope, limit=limit, since=since, until=until)
     history.search(query=query, scope=scope, since=since, until=until, limit=limit, result=result, elapsed=elapsed)
     emit_search_event(
@@ -89,13 +101,14 @@ def search(
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
-def recall(key: str) -> dict | None:
+def recall(key: str, ctx: Context | None = None) -> dict | None:
     """Read one episode in full by the `key` from a search hit: the user's
     message, the assistant's whole response, timestamp, model, project label,
     host, and source file. Null if no episode has that key. `then` shows what
     the same session said next (`turns`, and `more` for the rest): read it
     before relying on a claim, because sessions often correct themselves
     minutes later without the earlier turn saying so."""
+    history.client = _client_info(ctx)
     episode = _recall(get_database(), key)
     emit_recall_event(key=key, found=episode is not None)
     history.recall(key=key, found=episode is not None)
@@ -103,10 +116,11 @@ def recall(key: str) -> dict | None:
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
-def describe() -> dict:
+def describe(ctx: Context | None = None) -> dict:
     """What the store holds: episode count, counts by project label and by
     host, and the oldest/newest timestamps. Read-only; use it to pick a
     `scope` for `search` or to check whether ingestion is current."""
+    history.client = _client_info(ctx)
     history.describe()
     return _describe(get_database())
 

@@ -42,6 +42,7 @@ class QueryHistory:
         self.session = str(uuid.uuid4())
         self.project = project
         self.host = socket.gethostname()
+        self.client: dict | None = None  # the MCP client's own name and version, set per call by the server
         self._returned = {}  # episode key -> (query record key, rank), latest search wins
         self._ready = False
 
@@ -56,7 +57,8 @@ class QueryHistory:
                     db.create_collection(QUERIES)
                 self._ready = True
             return db.collection(QUERIES).insert(
-                {"ts": _now(), "session": self.session, "project": self.project, "host": self.host, **doc}
+                {"ts": _now(), "session": self.session, "project": self.project, "host": self.host,
+                 "client": self.client, **doc}
             )["_key"]
         except Exception as exc:  # noqa: BLE001 — bookkeeping must not fail the tool
             try:
