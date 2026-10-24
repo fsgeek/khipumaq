@@ -47,6 +47,10 @@ trusted_hash = "session-hash"
 enabled = true
 trusted_hash = "subagent-hash"
 
+[hooks.state."test-stop"]
+enabled = true
+trusted_hash = "stop-hash"
+
 '''
 STALE_SERVER = '''[mcp_servers.khipumaq]
 command = "old-khipumaq"
@@ -72,6 +76,7 @@ def codex_home(tmp_path, monkeypatch):
             for key, digest in (
                 ("test-session-end", "session-hash"),
                 ("test-subagent-stop", "subagent-hash"),
+                ("test-stop", "stop-hash"),
             )
         ]
 

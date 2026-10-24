@@ -33,6 +33,7 @@ def main(argv=None):
     install.add_argument("--no-codex", action="store_true", help="skip the Codex hooks")
     sub.add_parser("uninstall", help="remove khipumaq's hooks and MCP entry")
     sub.add_parser("codex-hook", help="(run by Codex) detach an ingest of the closing rollout")
+    sub.add_parser("claude-hook", help="(run by Claude Code after each turn) detach an ingest of the session")
     args = parser.parse_args(argv)
 
     if args.command == "serve":
@@ -56,6 +57,10 @@ def main(argv=None):
         return 0
     if args.command == "sweep":
         return _sweep(everything=args.all)
+    if args.command == "claude-hook":
+        from khipumaq.setup import claude_hook
+
+        return claude_hook()
     if args.command == "codex-hook":
         from khipumaq.setup import codex_hook
 

@@ -31,8 +31,11 @@ from pathlib import Path
 
 MCP_NAME = "khipumaq"
 LEGACY_MCP_NAME = "llm-memory"
-CODEX_EVENTS = ("SessionEnd", "SubagentStop")
-_OURS = ("khipumaq ingest claude-session", "khipumaq codex-hook")
+# Stop fires after every turn, so a session is in the store while it runs and
+# a paired session (Claude and Codex in one directory) can read it.
+CODEX_EVENTS = ("SessionEnd", "SubagentStop", "Stop")
+CLAUDE_EVENTS = ("SessionEnd", "Stop")
+_OURS = ("khipumaq ingest claude-session", "khipumaq codex-hook", "khipumaq claude-hook")
 _LEGACY = ("llm_memory.ingest", "codex-hook-ingest")
 
 
@@ -56,6 +59,10 @@ def command_prefix():
 
 def _claude_hook_command():
     return " ".join(command_prefix() + ["ingest", "claude-session"])
+
+
+def _claude_turn_hook_command():
+    return " ".join(command_prefix() + ["claude-hook"])
 
 
 def _codex_hook_command():
@@ -128,9 +135,10 @@ def _add_hook(doc, event, command, **fields):
 
 def install_claude(settings_path, mcp_config_path):
     settings = _load(settings_path)
-    _strip_hooks(settings, ("SessionEnd",))
+    _strip_hooks(settings, CLAUDE_EVENTS)
     # Fails loudly and does not retry (spec D4): the sweep is the retry.
     _add_hook(settings, "SessionEnd", _claude_hook_command(), timeout=30)
+    _add_hook(settings, "Stop", _claude_turn_hook_command())
     _write_json(settings_path, settings)
 
     config = _load(mcp_config_path)
@@ -152,7 +160,7 @@ def _remove_legacy_mcp(config):
 
 def uninstall_claude(settings_path, mcp_config_path):
     settings = _load(settings_path)
-    if _strip_hooks(settings, ("SessionEnd",)):
+    if _strip_hooks(settings, CLAUDE_EVENTS):
         _write_json(settings_path, settings)
     config = _load(mcp_config_path)
     if config.get("mcpServers", {}).pop(MCP_NAME, None) is not None:
@@ -319,6 +327,26 @@ def codex_hook(stdin=sys.stdin):
     with open(log, "a") as out:
         child = subprocess.Popen(
             ["timeout", "300", sys.executable, "-m", "khipumaq.ingest", "codex"],
+            stdin=subprocess.PIPE, stdout=out, stderr=subprocess.STDOUT,
+            start_new_session=True, text=True,
+        )
+        child.stdin.write(payload)
+        child.stdin.close()
+    return 0
+
+
+def claude_hook(stdin=sys.stdin):
+    """Claude Code's Stop hook fires after every turn and the turn waits for
+    it. Hand the hook JSON to a detached ingest and return at once, as
+    `codex_hook` does; output goes to the log, and SessionEnd and the sweep
+    are the retry."""
+    payload = stdin.read()
+    state = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state")
+    log = state / "khipumaq" / "claude-hook.log"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    with open(log, "a") as out:
+        child = subprocess.Popen(
+            ["timeout", "300", sys.executable, "-m", "khipumaq.ingest", "claude-session"],
             stdin=subprocess.PIPE, stdout=out, stderr=subprocess.STDOUT,
             start_new_session=True, text=True,
         )

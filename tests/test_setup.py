@@ -409,3 +409,53 @@ def test_install_windows_clients_does_not_create_missing_config(tmp_path):
 
     assert setup.install_windows_clients(profile) == []
     assert all(not path.exists() for path in paths)
+
+
+def _handlers(settings, event):
+    return [h for group in settings.get("hooks", {}).get(event, []) for h in group.get("hooks", [])]
+
+
+def test_install_claude_adds_a_per_turn_stop_hook_once_and_uninstall_removes_it(tmp_path):
+    # Paired sessions (Claude and Codex in one directory at once) can only
+    # see each other through khipumaq if a session is ingested as it goes,
+    # not only when it ends.
+    settings_path, claude_json = tmp_path / "settings.json", tmp_path / ".claude.json"
+    other = {"type": "command", "command": "/opt/other stop-hook"}
+    _write_json(settings_path, {"hooks": {"Stop": [{"hooks": [other]}]}})
+
+    setup.install_claude(settings_path, claude_json)
+    setup.install_claude(settings_path, claude_json)
+    settings = json.loads(settings_path.read_text(encoding="utf-8"))
+    stop = _handlers(settings, "Stop")
+    assert sum("khipumaq claude-hook" in h["command"] for h in stop) == 1
+    assert other in stop
+    assert sum("khipumaq ingest claude-session" in h["command"] for h in _handlers(settings, "SessionEnd")) == 1
+
+    setup.uninstall_claude(settings_path, claude_json)
+    settings = json.loads(settings_path.read_text(encoding="utf-8"))
+    assert _handlers(settings, "Stop") == [other]
+    assert _handlers(settings, "SessionEnd") == []
+
+
+def test_codex_hooks_include_the_per_turn_stop_event():
+    assert "Stop" in setup.CODEX_EVENTS
+
+
+def test_claude_hook_returns_quickly_and_logs_detached_ingest(tmp_path, monkeypatch):
+    # A directory as the transcript makes the detached ingest fail before it
+    # opens any database: the child does not inherit the suite's redirection
+    # to private collections, so it must never reach a write.
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    not_a_file = tmp_path / "not-a-transcript"
+    not_a_file.mkdir()
+    payload = json.dumps({"hook_event_name": "Stop", "session_id": "s", "transcript_path": str(not_a_file)})
+
+    started = time.monotonic()
+    assert setup.claude_hook(io.StringIO(payload)) == 0
+    assert time.monotonic() - started < 0.75
+    log = tmp_path / "state" / "khipumaq" / "claude-hook.log"
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline and not (log.exists() and "transcript not found" in log.read_text()):
+        time.sleep(0.02)
+    assert "transcript not found" in log.read_text(encoding="utf-8")
