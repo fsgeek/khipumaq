@@ -482,3 +482,40 @@ def test_search_without_filters_returns_empty_envelope_for_no_match():
 
     assert result["total"] == 0
     assert result["hits"] == []
+
+
+# Snippets centred on the matched words (yanantin 2026-10-26: in 16 of 33
+# judged misses the answer was in a returned hit whose first 200 characters
+# stopped before it, and no recall followed).
+from khipumaq.search import _snippet
+
+
+def test_snippet_shows_a_match_that_lies_past_the_first_200_characters():
+    text = "Preamble about something else. " * 20 + "The port moved to 8530 after the restart. " + "Tail. " * 30
+    s = _snippet(text, "port restart")
+    assert "port moved to 8530 after the restart" in s
+    assert s.startswith("…") and s.endswith("…")
+    assert len(s.strip("…")) <= 200
+
+
+def test_snippet_of_an_early_match_starts_at_the_beginning():
+    text = "The port moved to 8530. " + "Unrelated text follows here. " * 20
+    s = _snippet(text, "port")
+    assert s.startswith("The port moved") and s.endswith("…")
+
+
+def test_snippet_prefers_the_window_holding_the_most_distinct_query_words():
+    text = ("alpha " + "x" * 300 + " alpha beta gamma together " + "y" * 300 + " alpha")
+    assert "alpha beta gamma together" in _snippet(text, "alpha beta gamma")
+
+
+def test_snippet_falls_back_to_the_start_when_no_word_matches_literally():
+    # The engine matches on stems ("truncation" -> "truncat"), so a hit may
+    # contain no query word verbatim.
+    text = "It was truncated at the boundary. " * 20
+    assert _snippet(text, "truncation") == text[:200] + "…"
+
+
+def test_snippet_of_short_text_is_the_whole_text():
+    assert _snippet("short answer about ports", "ports") == "short answer about ports"
+    assert _snippet("", "anything") == ""

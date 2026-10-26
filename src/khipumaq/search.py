@@ -1,3 +1,5 @@
+import re
+
 from khipumaq.index import ANALYZER, CHAT_VIEW, OPT_IN_LABELS, VIEW
 
 _AQL = """
@@ -33,6 +35,36 @@ FOR doc IN @@view
 """
 
 _FIELDS = ("response", "user_message", "state_text")
+
+
+def _snippet(text, query, width=200, lead=60):
+    """`width` characters of `text` around the matched query words, not its
+    first `width`: yanantin measured (2026-10-26) that in half of the judged
+    searches that existed-but-weren't-found, the answer was in a returned hit
+    whose opening stopped before it. Takes the window, starting `lead`
+    characters before an occurrence, that holds the most distinct query words
+    (earliest on ties), and marks a cut with "…". A hit matched only through
+    stemming has no literal occurrence, so it keeps the opening."""
+    if len(text) <= width:
+        return text
+    low = text.lower()
+    tokens = {t for t in query.lower().split() if t}
+    positions = sorted(m.start() for t in tokens for m in re.finditer(re.escape(t), low))
+    if not positions:
+        return text[:width] + "…"
+    best, best_score = 0, -1
+    for pos in positions:
+        start = max(0, min(pos - lead, len(text) - width))
+        score = sum(1 for t in tokens if t in low[start:start + width])
+        if score > best_score:
+            best, best_score = start, score
+    start = best
+    if start > 0:  # begin at a word, not inside one
+        space = text.find(" ", start, start + 20)
+        if space != -1:
+            start = space + 1
+    end = start + width
+    return ("…" if start > 0 else "") + text[start:end] + ("…" if end < len(text) else "")
 
 
 def _matched_field(doc, query):
@@ -85,7 +117,7 @@ def search(db, query, scope="all", limit=10, view=VIEW, since=None, until=None):
     hits = []
     for doc in cursor:
         field = _matched_field(doc, query)
-        snippet = (doc.get(field) or "")[:200] if field else ""
+        snippet = _snippet(doc.get(field) or "", query) if field else ""
         hits.append(
             {
                 "key": doc["_key"],
