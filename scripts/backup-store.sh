@@ -15,7 +15,9 @@ GIT_ROOT=$(cd "$(dirname "$0")/.." && pwd)
 CFG="$GIT_ROOT/config/db-config.ini"
 BACKUP_ROOT="${BACKUP_ROOT:-$HOME/backups/llm-memory}"
 REPLICA_ENDPOINT="${REPLICA_ENDPOINT:-tcp://127.0.0.1:8529}"
-export RESTIC_REPOSITORY="${RESTIC_REPOSITORY:-sftp:activitycontext.work:backups/llm-memory-restic}"
+# The offsite repository is configured on the backup host (the systemd unit's
+# environment), not here: this repository is public.
+export RESTIC_REPOSITORY="${RESTIC_REPOSITORY:?set RESTIC_REPOSITORY in the backup unit environment}"
 export RESTIC_PASSWORD_FILE="${RESTIC_PASSWORD_FILE:-$HOME/.config/llm-memory/restic-password}"
 
 read -r HOST PORT DB USER PW < <(python3 -c "
@@ -43,9 +45,12 @@ host, port, db, user, pw, replica = sys.argv[1:]
 rhost = replica.split("://", 1)[1]
 n1 = ArangoClient(hosts=f"http://{host}:{port}").db(db, username=user, password=pw).collection("episodes").count()
 n2 = ArangoClient(hosts=f"http://{rhost}").db(db, username=user, password=pw).collection("episodes").count()
-print(f"primary {n1} episodes, replica {n2}")
-if n1 != n2:
-    raise SystemExit("VERIFY FAILED: replica count differs from primary")
+# Ingest runs after every turn now, so the primary may grow between the dump
+# and this count; episodes are never deleted, so it can never shrink. Exact
+# equality is checked against the dump in 3b.
+print(f"primary {n1} episodes, replica {n2} ({n1 - n2} ingested since the dump)")
+if n2 > n1:
+    raise SystemExit("VERIFY FAILED: replica holds more episodes than the primary")
 EOF
 
 echo "[3b/4] verify content: replica equals the dump, collection by collection"

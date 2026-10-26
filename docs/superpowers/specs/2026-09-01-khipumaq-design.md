@@ -319,7 +319,7 @@ out and the web UI is reachable on the LAN. `scripts/backup-store.sh`
 `scripts/install-backup-timer.sh`): arangodump the primary into
 `~/backups/llm-memory/<date>` (29 MB compressed, ~5 s), arangorestore into
 wam-nuc's own `llm_memory` database (warm replica and intended future
-primary), verify counts, restic to `sftp:activitycontext.work:backups/llm-memory-restic`
+primary), verify counts, restic to the offsite repository configured on the backup host
 with 30 daily / 24 monthly retention. The restic password file is
 `~/.config/llm-memory/restic-password` on wam-nuc only (0600); it must be
 copied somewhere safe. First run 2026-09-05 00:55 UTC: 26,117 episodes,
