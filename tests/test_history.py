@@ -385,8 +385,8 @@ def test_each_mcp_tool_returns_normally_when_history_database_getter_raises(
         "episodes": 1,
         "newest": "2026-09-24T00:00:00Z",
         "oldest": "2026-09-24T00:00:00Z",
-        "labels": {"test": 1},
-        "hosts": {"test-host": 1},
+        "labels": [{"label": "test", "count": 1}],
+        "hosts": [{"host": "test-host", "count": 1}],
     }
 
     def unavailable_database():
@@ -417,8 +417,8 @@ def test_each_mcp_tool_returns_normally_when_history_collection_insert_raises(
         "episodes": 1,
         "newest": "2026-09-24T00:00:00Z",
         "oldest": "2026-09-24T00:00:00Z",
-        "labels": {"test": 1},
-        "hosts": {"test-host": 1},
+        "labels": [{"label": "test", "count": 1}],
+        "hosts": [{"host": "test-host", "count": 1}],
     }
     collection = FakeCollection(insert_error=RuntimeError("insert failed"))
     history_database = FakeDatabase(collection)

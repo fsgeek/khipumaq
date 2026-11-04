@@ -27,6 +27,10 @@ def label_from_project_dir(name):
     directory of its own, and the Codex app in a dated scratch directory."""
     if "-local-agent-mode-sessions-" in name:
         return "cowork"
+    # A Python tempfile folder (/tmp/tmpXXXXXXXX) says nothing about the
+    # project; one label for all of them, not one "project" per folder.
+    if re.match(r"-tmp-tmp[A-Za-z0-9_-]{8}(-|$)", name):
+        return "tmp"
     if re.search(r"-Documents-Codex-\d{4}-\d{2}-\d{2}(-|$)", name):
         return "codex"
     m = re.search(r"-(?:projects|source-repos|Documents-Claude-Projects)-(.+)$", name)

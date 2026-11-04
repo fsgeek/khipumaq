@@ -48,6 +48,7 @@ def _self_description() -> str:
 
 mcp = FastMCP(SERVER_NAME, instructions=_self_description())
 history = QueryHistory(get_database, project=project_label())
+TOP_LABELS = 30  # describe's default: enough to pick a scope, without the long tail
 
 
 def _client_info(ctx):
@@ -116,13 +117,21 @@ def recall(key: str, ctx: Context | None = None) -> dict | None:
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
-def describe(ctx: Context | None = None) -> dict:
-    """What the store holds: episode count, counts by project label and by
-    host, and the oldest/newest timestamps. Read-only; use it to pick a
-    `scope` for `search` or to check whether ingestion is current."""
+def describe(all_labels: bool = False, ctx: Context | None = None) -> dict:
+    """What the store holds: episode count, the largest project labels and
+    hosts by episode count, and the oldest/newest timestamps. Read-only; use it
+    to pick a `scope` for `search` or to check whether ingestion is current.
+    Shows the 30 largest labels and declares the rest in `labels_omitted`;
+    `all_labels=true` lists every one."""
     history.client = _client_info(ctx)
     history.describe()
-    return _describe(get_database())
+    stats = _describe(get_database())
+    rest = stats["labels"][TOP_LABELS:]
+    if all_labels or not rest:
+        return stats
+    return {**stats, "labels": stats["labels"][:TOP_LABELS],
+            "labels_omitted": {"labels": len(rest), "episodes": sum(l["count"] for l in rest),
+                               "how": "describe(all_labels=true) lists every label"}}
 
 
 if __name__ == "__main__":

@@ -91,6 +91,13 @@ def _matched_field(doc, query):
     return max(nonempty)[1] if nonempty else None
 
 
+def _searched(scope, since, until):
+    """What a search covered, returned with its hits: a result that doesn't
+    say where it looked can't say what it missed."""
+    excluded = [] if scope in OPT_IN_LABELS else sorted(OPT_IN_LABELS)
+    return {"scope": scope, "since": since, "until": until, "excluded_labels": excluded}
+
+
 def search(db, query, scope="all", limit=10, view=VIEW, since=None, until=None):
     """Search an ArangoSearch view with BM25 ranking. Defaults to the
     conversation-inclusive view (user_message + response + state_text); `view`
@@ -110,7 +117,7 @@ def search(db, query, scope="all", limit=10, view=VIEW, since=None, until=None):
     if scope in OPT_IN_LABELS and view == VIEW:
         view = CHAT_VIEW
         if view not in [v["name"] for v in db.views()]:  # a store that never imported chats
-            return {"total": 0, "total_all": 0, "hits": []}
+            return {"total": 0, "total_all": 0, "hits": [], "searched": _searched(scope, since, until)}
     bind_vars = {"@view": view, "q": query, "analyzer": ANALYZER, "limit": limit}
     aql = _with_filters(_AQL, bind_vars, scope, since, until)
     cursor = db.aql.execute(aql, bind_vars=bind_vars, full_count=True)
@@ -134,7 +141,8 @@ def search(db, query, scope="all", limit=10, view=VIEW, since=None, until=None):
         )
     return {"total": cursor.statistics()["fullCount"],
             "total_all": _count_all(db, query, view, scope, since, until),
-            "hits": hits}
+            "hits": hits,
+            "searched": _searched(scope, since, until)}
 
 
 def _with_filters(aql, bind_vars, scope, since, until):

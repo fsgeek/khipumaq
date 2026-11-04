@@ -46,7 +46,7 @@ def test_total_all_requires_every_token_across_fields(search_view, other_field):
 
     result = search(db, "heliotrope cantilever", view=view)
 
-    assert set(result) == {"total", "total_all", "hits"}
+    assert set(result) == {"total", "total_all", "hits", "searched"}
     assert result["total"] == 2
     assert result["total_all"] == 1
     assert {hit["key"] for hit in result["hits"]} == {"both", "partial"}
@@ -169,7 +169,9 @@ def test_an_opt_in_scope_on_a_store_that_never_imported_chats_finds_nothing_inst
     db.delete_view(index.CHAT_VIEW)
     try:
         for scope in OPT_IN_LABELS:
-            assert search(db, "anything at all", scope=scope) == {"total": 0, "total_all": 0, "hits": []}
+            assert search(db, "anything at all", scope=scope) == {
+                "total": 0, "total_all": 0, "hits": [],
+                "searched": {"scope": scope, "since": None, "until": None, "excluded_labels": []}}
     finally:
         ensure_chat_index(db)
 
@@ -183,7 +185,9 @@ def test_total_all_is_zero_when_analyzer_drops_every_token(search_view, query):
         bind_vars={"q": query, "analyzer": ANALYZER},
     )) == []
 
-    assert search(db, query, view=view) == {"total": 0, "total_all": 0, "hits": []}
+    assert search(db, query, view=view) == {
+        "total": 0, "total_all": 0, "hits": [],
+        "searched": {"scope": "all", "since": None, "until": None, "excluded_labels": sorted(OPT_IN_LABELS)}}
 
 
 def test_repeated_query_words_do_not_change_total_all(search_view):
